@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from datetime import date, timedelta
 from supabase import create_client
 
-st.set_page_config(page_title=Sistema de gestión administrativa", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Sistema de gestión administrativa", page_icon="💎", layout="wide")
 
 SUPABASE_URL = "https://tqgmapwcknhdydjkbdtj.supabase.co"
 ZONA = "America/Bogota"
