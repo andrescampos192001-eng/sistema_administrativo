@@ -1,5 +1,5 @@
 # ============================================================
-# Sistema de gestión administrativa
+#  Sistema de gestión administrativa
 #  Streamlit + Supabase
 # ============================================================
 import streamlit as st
@@ -131,7 +131,14 @@ def ventas():
     if df.empty:
         return pd.DataFrame({c: [] for c in cols}).assign(
             fecha=pd.to_datetime([]), dia=pd.to_datetime([]))
-    df["fecha"] = pd.to_datetime(df["fecha"], utc=True).dt.tz_convert(ZONA).dt.tz_localize(None)
+    # La hora se guarda con zona (-05:00). Si la columna es "timestamp" sin zona,
+    # el valor ya viene en hora local y no se debe convertir.
+    raw = df["fecha"].astype(str)
+    con_zona = raw.str.contains(r"(?:Z|[+-]\d{2}(?::?\d{2})?)$", regex=True).all()
+    if con_zona:
+        df["fecha"] = pd.to_datetime(raw, utc=True).dt.tz_convert(ZONA).dt.tz_localize(None)
+    else:
+        df["fecha"] = pd.to_datetime(raw)
     df["dia"] = df["fecha"].dt.normalize()
     for c in ["cantidad", "total", "costo_unitario"]:
         df[c] = pd.to_numeric(df.get(c, 0), errors="coerce").fillna(0)
@@ -222,9 +229,9 @@ def serie_diaria(v, ini, fin):
 # ------------------------------------------------------------
 #  Menú lateral
 # ------------------------------------------------------------
-st.sidebar.markdown("## 💎sistema de gestion administrativa")
+st.sidebar.markdown("## 💎 Sistema administrativo")
 st.sidebar.caption("Sistema de gestión administrativa")
-st.sidebar.caption(f"📅 Hoy: {hoy_co():%d/%m/%Y}")
+st.sidebar.caption(f"📅 {ahora_co():%d/%m/%Y} · 🕒 {ahora_co():%I:%M %p}")
 menu = st.sidebar.radio(
     "MENÚ",
     ["🏠 Inicio y Gráficos", "➕ Agregar Producto", "📦 Inventario",
@@ -241,7 +248,7 @@ if "msg" in st.session_state:
 #  INICIO
 # ============================================================
 if menu == "🏠 Inicio y Gráficos":
-    st.title("sistema de gestion administrativa")
+    st.title("A&S")
     st.subheader("Dashboard gerencial automatizado")
 
     inv, v, g = inventario(), ventas(), gastos()
