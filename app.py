@@ -1,14 +1,15 @@
 # ============================================================
-#  Sistema de gestión administrativa
+# Sistema de gestión administrativa
 #  Streamlit + Supabase
 # ============================================================
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from supabase import create_client
 
-st.set_page_config(page_title="Sistema de gestión administrativa", page_icon="💎", layout="wide")
+st.set_page_config(page_title="sistema administrativo", page_icon="💎", layout="wide")
 
 SUPABASE_URL = "https://tqgmapwcknhdydjkbdtj.supabase.co"
 ZONA = "America/Bogota"
@@ -67,6 +68,15 @@ st.markdown(
 # ------------------------------------------------------------
 #  Utilidades
 # ------------------------------------------------------------
+def ahora_co():
+    """Fecha y hora actuales de Colombia (el servidor de Streamlit usa UTC)."""
+    return datetime.now(ZoneInfo(ZONA))
+
+
+def hoy_co():
+    return ahora_co().date()
+
+
 def dinero(x):
     return f"${x:,.0f}"
 
@@ -189,7 +199,7 @@ def por_mes(df, col, rango, fecha, filtro=None):
 
 
 def tendencia_mensual(v, g, meses=6):
-    rango = pd.period_range(end=pd.Timestamp(date.today()).to_period("M"), periods=meses, freq="M")
+    rango = pd.period_range(end=pd.Timestamp(hoy_co()).to_period("M"), periods=meses, freq="M")
     df = pd.DataFrame({
         "Ingresos": por_mes(v, "total", rango, "dia"),
         "Costo de ventas": por_mes(v, "costo_total", rango, "dia"),
@@ -212,8 +222,9 @@ def serie_diaria(v, ini, fin):
 # ------------------------------------------------------------
 #  Menú lateral
 # ------------------------------------------------------------
-st.sidebar.markdown("## 💎 sistema administrativo")
+st.sidebar.markdown("## 💎sistema de gestion administrativa")
 st.sidebar.caption("Sistema de gestión administrativa")
+st.sidebar.caption(f"📅 Hoy: {hoy_co():%d/%m/%Y}")
 menu = st.sidebar.radio(
     "MENÚ",
     ["🏠 Inicio y Gráficos", "➕ Agregar Producto", "📦 Inventario",
@@ -230,11 +241,11 @@ if "msg" in st.session_state:
 #  INICIO
 # ============================================================
 if menu == "🏠 Inicio y Gráficos":
-    st.title("A&S")
+    st.title("sistema de gestion administrativa")
     st.subheader("Dashboard gerencial automatizado")
 
     inv, v, g = inventario(), ventas(), gastos()
-    hoy = date.today()
+    hoy = hoy_co()
     mes = resumen(v, g, hoy.replace(day=1), hoy)
 
     c1, c2, c3, c4 = st.columns(4)
@@ -387,6 +398,7 @@ elif menu == "💰 Registrar Venta (POS)":
                 sb.table("Ventas").insert({
                     "cliente": cliente, "documento": doc, "direccion": direccion,
                     "ciudad": ciudad, "pais": pais, "responsable_iva": iva,
+                    "fecha": ahora_co().isoformat(),
                     "producto_id": l["id"], "producto": l["producto"], "cantidad": l["cantidad"],
                     "precio_unitario": l["precio"], "costo_unitario": l["costo"],
                     "descuento_pct": l["descuento"], "total": l["total"]}).execute()
@@ -403,7 +415,7 @@ elif menu == "💰 Registrar Venta (POS)":
 elif menu == "📊 Soporte Contable":
     st.title("📊 Soporte contable")
     v, g = ventas(), gastos()
-    hoy = date.today()
+    hoy = hoy_co()
     tab1, tab2, tab3 = st.tabs(["📈 Análisis comparativo", "🧾 Registrar gasto", "📒 Libro de movimientos"])
 
     with tab1:
@@ -494,7 +506,7 @@ elif menu == "📊 Soporte Contable":
                    "Aquí registra gastos como arriendo, servicios, nómina (fijos) o empaques, envíos y comisiones (variables).")
         with st.form("nuevo_gasto", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            fecha_g = c1.date_input("Fecha", value=hoy)
+            fecha_g = c1.date_input("Fecha", value=hoy, max_value=hoy)
             tipo_g = c2.selectbox("Tipo", ["Fijo", "Variable"])
             c3, c4 = st.columns(2)
             concepto = c3.text_input("Concepto (ej. Arriendo, Empaques)")
