@@ -212,7 +212,7 @@ def serie_diaria(v, ini, fin):
 # ------------------------------------------------------------
 #  Menú lateral
 # ------------------------------------------------------------
-st.sidebar.markdown("## 💎 BRI RODRÍGUEZ")
+st.sidebar.markdown("## 💎 sistema administrativo")
 st.sidebar.caption("Sistema de gestión administrativa")
 menu = st.sidebar.radio(
     "MENÚ",
@@ -230,7 +230,7 @@ if "msg" in st.session_state:
 #  INICIO
 # ============================================================
 if menu == "🏠 Inicio y Gráficos":
-    st.title("JOYERÍA BISUTERÍA BRI RODRÍGUEZ")
+    st.title("A&S")
     st.subheader("Dashboard gerencial automatizado")
 
     inv, v, g = inventario(), ventas(), gastos()
