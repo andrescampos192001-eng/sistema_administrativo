@@ -1,34 +1,51 @@
 # ============================================================
-#  Sistema de gestión administrativa
-#  Streamlit + Supabase
+#  SISTEMA DE GESTIÓN ADMINISTRATIVA · multiempresa
+#  Streamlit + Supabase (Auth + seguridad por filas)
 # ============================================================
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
+from secrets import token_hex
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
+
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 from supabase import create_client
 
-st.set_page_config(page_title="sistema administrativo", page_icon="💎", layout="wide")
+st.set_page_config(page_title="Sistema de gestión administrativa", page_icon="💎", layout="wide")
 
 SUPABASE_URL = "https://tqgmapwcknhdydjkbdtj.supabase.co"
 ZONA = "America/Bogota"
 
-# Paleta: azul oscuro, grises y negro
 AZUL, AZUL_CLARO, AZUL_OSCURO = "#3b82f6", "#60a5fa", "#1e3a8a"
 GRIS, GRIS_CLARO = "#64748b", "#cbd5e1"
-ROJO_SUAVE = "#94a3b8"
 
+ROLES = {
+    "gerente": "Gerente",
+    "administrador": "Administrador",
+    "contable": "Contable / Financiero",
+    "ventas": "Ventas",
+}
+TODOS = list(ROLES)
+PAGINAS = {
+    "🏠 Inicio y Gráficos": TODOS,
+    "📦 Inventario": TODOS,
+    "💰 Registrar Venta (POS)": ["gerente", "administrador", "ventas"],
+    "➕ Agregar Producto": ["gerente", "administrador"],
+    "📊 Soporte Contable": ["gerente", "administrador", "contable"],
+    "👥 Equipo": ["gerente"],
+    "⚙️ Panel Administrador": ["gerente", "administrador"],
+}
 
 # ------------------------------------------------------------
-#  Conexión
+#  Conexión: UN cliente por sesión de navegador (nunca compartido)
 # ------------------------------------------------------------
-@st.cache_resource
-def get_supabase():
-    return create_client(SUPABASE_URL, st.secrets["SUPABASE_KEY"])
+def get_sb():
+    if "sb" not in st.session_state:
+        st.session_state["sb"] = create_client(SUPABASE_URL, st.secrets["SUPABASE_KEY"])
+    return st.session_state["sb"]
 
 
-sb = get_supabase()
+sb = get_sb()
 
 # ------------------------------------------------------------
 #  Estilos
@@ -81,8 +98,11 @@ def dinero(x):
     return f"${x:,.0f}"
 
 
+def msg_error(e):
+    return getattr(e, "message", None) or str(e)
+
+
 def variacion(actual, anterior):
-    """Variación porcentual; None si no hay base de comparación."""
     if not anterior:
         return None
     return (actual - anterior) / abs(anterior) * 100
@@ -99,14 +119,20 @@ def estilo_fig(fig, alto=360):
     return fig
 
 
-@st.cache_data(ttl=15)
+# ------------------------------------------------------------
+#  Datos (siempre filtrados por la base de datos según el usuario)
+#  Sin caché compartida: así nunca se mezcla información entre empresas.
+# ------------------------------------------------------------
 def cargar(tabla):
-    r = sb.table(tabla).select("*").execute()
-    return pd.DataFrame(r.data or [])
-
-
-def refrescar():
-    st.cache_data.clear()
+    filas, ini = [], 0
+    while True:
+        r = sb.table(tabla).select("*").order("id").range(ini, ini + 999).execute()
+        bloque = r.data or []
+        filas += bloque
+        if len(bloque) < 1000:
+            break
+        ini += 1000
+    return pd.DataFrame(filas)
 
 
 def inventario():
@@ -131,8 +157,6 @@ def ventas():
     if df.empty:
         return pd.DataFrame({c: [] for c in cols}).assign(
             fecha=pd.to_datetime([]), dia=pd.to_datetime([]))
-    # La hora se guarda con zona (-05:00). Si la columna es "timestamp" sin zona,
-    # el valor ya viene en hora local y no se debe convertir.
     raw = df["fecha"].astype(str)
     con_zona = raw.str.contains(r"(?:Z|[+-]\d{2}(?::?\d{2})?)$", regex=True).all()
     if con_zona:
@@ -153,6 +177,11 @@ def gastos():
     df["fecha"] = pd.to_datetime(df["fecha"]).dt.normalize()
     df["monto"] = pd.to_numeric(df["monto"], errors="coerce").fillna(0)
     return df
+
+
+def equipo():
+    r = sb.table("miembros").select("*").order("creado_en").execute()
+    return pd.DataFrame(r.data or [])
 
 
 def filtrar(df, col, ini, fin):
@@ -180,7 +209,6 @@ def resumen(v, g, ini, fin):
 
 
 def periodos(opcion, hoy):
-    """Devuelve (periodo actual, periodo anterior comparable)."""
     if opcion == "Hoy vs ayer":
         return (hoy, hoy), (hoy - timedelta(1), hoy - timedelta(1))
     if opcion == "Últimos 7 días vs 7 anteriores":
@@ -227,17 +255,160 @@ def serie_diaria(v, ini, fin):
 
 
 # ------------------------------------------------------------
-#  Menú lateral
+#  Autenticación
 # ------------------------------------------------------------
-st.sidebar.markdown("## 💎 Sistema administrativo")
-st.sidebar.caption("Sistema de gestión administrativa")
+def usuario_actual():
+    try:
+        ses = sb.auth.get_session()  # renueva el token si venció
+        return ses.user if ses else None
+    except Exception:
+        return None
+
+
+def cargar_perfil(uid):
+    r = (sb.table("miembros")
+         .select("rol,nombre,empresa_id,activo,empresas(nombre)")
+         .eq("user_id", uid).execute())
+    return r.data[0] if r.data else None
+
+
+def cerrar_sesion():
+    try:
+        sb.auth.sign_out()
+    except Exception:
+        pass
+    st.session_state.clear()
+
+
+def pantalla_acceso():
+    _, centro, _ = st.columns([1, 1.4, 1])
+    with centro:
+        st.write("")
+        st.markdown("## 💎 Sistema de gestión administrativa")
+        st.caption("Inventario, ventas y contabilidad para tu empresa")
+        t1, t2 = st.tabs(["Ingresar", "Crear cuenta"])
+
+        with t1:
+            with st.form("login"):
+                correo = st.text_input("Correo electrónico")
+                clave = st.text_input("Contraseña", type="password")
+                enviar = st.form_submit_button("Ingresar", use_container_width=True)
+            if enviar:
+                ok = False
+                try:
+                    sb.auth.sign_in_with_password({"email": correo.strip(), "password": clave})
+                    ok = True
+                except Exception as e:
+                    if "not confirmed" in msg_error(e).lower():
+                        st.error("Debes confirmar tu correo antes de ingresar. Revisa tu bandeja de entrada.")
+                    else:
+                        st.error("Correo o contraseña incorrectos.")
+                if ok:
+                    st.rerun()
+
+        with t2:
+            with st.form("registro"):
+                correo = st.text_input("Correo electrónico", key="reg_correo")
+                clave = st.text_input("Contraseña (mínimo 8 caracteres)", type="password", key="reg_clave")
+                clave2 = st.text_input("Repite la contraseña", type="password", key="reg_clave2")
+                enviar = st.form_submit_button("Crear cuenta", use_container_width=True)
+            if enviar:
+                if "@" not in correo or "." not in correo:
+                    st.error("Escribe un correo válido.")
+                elif len(clave) < 8:
+                    st.error("La contraseña debe tener al menos 8 caracteres.")
+                elif clave != clave2:
+                    st.error("Las contraseñas no coinciden.")
+                else:
+                    ok = False
+                    try:
+                        res = sb.auth.sign_up({"email": correo.strip(), "password": clave})
+                        if res.session:
+                            ok = True
+                        else:
+                            st.success("Cuenta creada. Confirma tu correo desde el mensaje que te enviamos "
+                                       "y luego ingresa.")
+                    except Exception as e:
+                        st.error(msg_error(e))
+                    if ok:
+                        st.rerun()
+
+
+def pantalla_onboarding(user):
+    _, centro, _ = st.columns([1, 1.4, 1])
+    with centro:
+        st.write("")
+        st.markdown("## Bienvenido")
+        st.caption(f"Sesión iniciada como {user.email}")
+        t1, t2 = st.tabs(["🏢 Crear mi empresa", "🔑 Unirme con código"])
+
+        with t1:
+            st.caption("Serás el gerente de la empresa y podrás invitar a tu equipo.")
+            with st.form("crear_empresa"):
+                empresa = st.text_input("Nombre de la empresa")
+                nombre = st.text_input("Tu nombre")
+                enviar = st.form_submit_button("Crear empresa", use_container_width=True)
+            if enviar:
+                ok = False
+                try:
+                    sb.rpc("crear_empresa", {"p_nombre": empresa, "p_nombre_usuario": nombre}).execute()
+                    ok = True
+                except Exception as e:
+                    st.error(msg_error(e))
+                if ok:
+                    st.rerun()
+
+        with t2:
+            st.caption("Pide al gerente de tu empresa un código de invitación.")
+            with st.form("unirse"):
+                codigo = st.text_input("Código de invitación")
+                nombre = st.text_input("Tu nombre", key="nombre_union")
+                enviar = st.form_submit_button("Unirme a la empresa", use_container_width=True)
+            if enviar:
+                ok = False
+                try:
+                    sb.rpc("unirse_con_invitacion", {"p_codigo": codigo, "p_nombre_usuario": nombre}).execute()
+                    ok = True
+                except Exception as e:
+                    st.error(msg_error(e))
+                if ok:
+                    st.rerun()
+
+        if st.button("Cerrar sesión"):
+            cerrar_sesion()
+            st.rerun()
+
+
+user = usuario_actual()
+if user is None:
+    pantalla_acceso()
+    st.stop()
+
+perfil = cargar_perfil(user.id)
+if perfil is None:
+    pantalla_onboarding(user)
+    st.stop()
+if not perfil["activo"]:
+    st.error("Tu cuenta fue desactivada por el gerente de la empresa.")
+    if st.button("Cerrar sesión"):
+        cerrar_sesion()
+        st.rerun()
+    st.stop()
+
+rol = perfil["rol"]
+empresa_nombre = (perfil.get("empresas") or {}).get("nombre", "")
+
+# ------------------------------------------------------------
+#  Menú lateral (según el rol)
+# ------------------------------------------------------------
+st.sidebar.markdown(f"## 💎 {empresa_nombre}")
+st.sidebar.caption(f"👤 {perfil['nombre'] or user.email} · {ROLES[rol]}")
 st.sidebar.caption(f"📅 {ahora_co():%d/%m/%Y} · 🕒 {ahora_co():%I:%M %p}")
 menu = st.sidebar.radio(
-    "MENÚ",
-    ["🏠 Inicio y Gráficos", "➕ Agregar Producto", "📦 Inventario",
-     "💰 Registrar Venta (POS)", "📊 Soporte Contable", "⚙️ Panel Administrador"],
-    label_visibility="collapsed",
-)
+    "MENÚ", [p for p, roles in PAGINAS.items() if rol in roles], label_visibility="collapsed")
+if st.sidebar.button("🔒 Cerrar sesión"):
+    cerrar_sesion()
+    st.rerun()
 
 if "carrito" not in st.session_state:
     st.session_state["carrito"] = []
@@ -248,8 +419,8 @@ if "msg" in st.session_state:
 #  INICIO
 # ============================================================
 if menu == "🏠 Inicio y Gráficos":
-    st.title("A&S")
-    st.subheader("Dashboard gerencial automatizado")
+    st.title(empresa_nombre or "Inicio")
+    st.subheader("Dashboard gerencial")
 
     inv, v, g = inventario(), ventas(), gastos()
     hoy = hoy_co()
@@ -258,8 +429,12 @@ if menu == "🏠 Inicio y Gráficos":
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("📦 Modelos de productos", len(inv))
     c2.metric("🧮 Unidades en stock", f"{int(inv['stock'].sum()):,}")
-    c3.metric("💰 Ingresos del mes", dinero(mes["Ingresos"]))
-    c4.metric("📈 Utilidad neta del mes", dinero(mes["Utilidad neta"]))
+    if rol == "ventas":
+        c3.metric("💰 Mis ventas del mes", dinero(mes["Ingresos"]))
+        c4.metric("🧾 N.º de ventas del mes", mes["N.º de ventas"])
+    else:
+        c3.metric("💰 Ingresos del mes", dinero(mes["Ingresos"]))
+        c4.metric("📈 Utilidad neta del mes", dinero(mes["Utilidad neta"]))
 
     st.write("")
     izq, der = st.columns(2)
@@ -267,8 +442,7 @@ if menu == "🏠 Inicio y Gráficos":
         st.markdown("### Ingresos de los últimos 30 días")
         ini = hoy - timedelta(29)
         dias = pd.date_range(ini, hoy)
-        vals = serie_diaria(v, ini, hoy)
-        fig = go.Figure(go.Scatter(x=dias, y=vals, mode="lines", fill="tozeroy",
+        fig = go.Figure(go.Scatter(x=dias, y=serie_diaria(v, ini, hoy), mode="lines", fill="tozeroy",
                                    line=dict(color=AZUL_CLARO, width=2.5),
                                    fillcolor="rgba(59,130,246,0.15)"))
         st.plotly_chart(estilo_fig(fig), use_container_width=True)
@@ -281,6 +455,17 @@ if menu == "🏠 Inicio y Gráficos":
             top = vm.groupby("producto")["total"].sum().nlargest(5).sort_values()
             fig = go.Figure(go.Bar(x=top.values, y=top.index, orientation="h", marker_color=AZUL))
             st.plotly_chart(estilo_fig(fig), use_container_width=True)
+
+    if rol != "ventas":
+        vm = filtrar(v, "dia", hoy.replace(day=1), hoy)
+        if not vm.empty and "vendedor_id" in vm.columns:
+            st.markdown("### Ventas por persona del equipo (mes)")
+            eq = equipo()
+            nombres = dict(zip(eq["user_id"], eq["nombre"].fillna(eq["correo"]))) if not eq.empty else {}
+            vm = vm.assign(vendedor=vm["vendedor_id"].map(nombres).fillna("Sin asignar"))
+            por = vm.groupby("vendedor")["total"].sum().sort_values()
+            fig = go.Figure(go.Bar(x=por.values, y=por.index, orientation="h", marker_color=AZUL_CLARO))
+            st.plotly_chart(estilo_fig(fig, 300), use_container_width=True)
 
     bajos = inv[inv["stock"] <= 5]
     if not bajos.empty:
@@ -300,15 +485,18 @@ elif menu == "➕ Agregar Producto":
         costo = c3.number_input("Costo unitario ($)", min_value=0.0, step=100.0)
         precio = c4.number_input("Precio de venta ($)", min_value=0.0, step=100.0)
         stock = c5.number_input("Stock inicial", min_value=0, step=1)
-        if st.form_submit_button("Guardar producto"):
-            if not nombre.strip():
-                st.error("El nombre es obligatorio.")
-            else:
+        enviar = st.form_submit_button("Guardar producto")
+    if enviar:
+        if not nombre.strip():
+            st.error("El nombre es obligatorio.")
+        else:
+            try:
                 sb.table("Inventario").insert({
                     "nombre": nombre.strip(), "categoria": categoria.strip(),
                     "costo": costo, "precio": precio, "stock": int(stock)}).execute()
-                refrescar()
                 st.success(f"Producto «{nombre}» guardado.")
+            except Exception as e:
+                st.error(msg_error(e))
 
 # ============================================================
 #  INVENTARIO
@@ -321,14 +509,18 @@ elif menu == "📦 Inventario":
     else:
         buscar = st.text_input("🔎 Buscar producto")
         vista = inv[inv["nombre"].str.contains(buscar, case=False, na=False)] if buscar else inv
+        vista = vista.drop(columns=[c for c in ["empresa_id"] if c in vista.columns])
         c1, c2, c3 = st.columns(3)
         c1.metric("Modelos", len(vista))
         c2.metric("Unidades", f"{int(vista['stock'].sum()):,}")
-        c3.metric("Valor del inventario (costo)", dinero((vista["costo"] * vista["stock"]).sum()))
+        if rol == "ventas":
+            vista = vista.drop(columns=["costo"])
+        else:
+            c3.metric("Valor del inventario (costo)", dinero((vista["costo"] * vista["stock"]).sum()))
         st.dataframe(vista, use_container_width=True, hide_index=True)
 
 # ============================================================
-#  PUNTO DE VENTA (automatiza inventario + ingresos)
+#  PUNTO DE VENTA
 # ============================================================
 elif menu == "💰 Registrar Venta (POS)":
     st.title("💰 Registrar venta")
@@ -352,7 +544,7 @@ elif menu == "💰 Registrar Venta (POS)":
         c_prod, c_cant, c_desc = st.columns(3)
         nombre_sel = c_prod.selectbox("Producto", disp["nombre"].tolist())
         fila = disp[disp["nombre"] == nombre_sel].iloc[0]
-        ya = sum(l["cantidad"] for l in st.session_state["carrito"] if l["id"] == fila["id"])
+        ya = sum(l["cantidad"] for l in st.session_state["carrito"] if l["id"] == int(fila["id"]))
         maximo = int(fila["stock"]) - ya
         c_prod.caption(f"Precio: {dinero(fila['precio'])} · Disponible: {maximo}")
         cantidad = c_cant.number_input("Cantidad", min_value=1, max_value=max(maximo, 1), value=1)
@@ -366,8 +558,7 @@ elif menu == "💰 Registrar Venta (POS)":
             else:
                 st.session_state["carrito"].append({
                     "id": int(fila["id"]), "producto": nombre_sel, "cantidad": int(cantidad),
-                    "precio": float(fila["precio"]), "costo": float(fila["costo"]),
-                    "descuento": desc,
+                    "precio": float(fila["precio"]), "descuento": float(desc),
                     "total": round(cantidad * float(fila["precio"]) * (1 - desc / 100), 2)})
                 st.rerun()
 
@@ -384,36 +575,20 @@ elif menu == "💰 Registrar Venta (POS)":
         st.session_state["carrito"] = []
         st.rerun()
     if b2.button("✅ Confirmar venta", disabled=not carrito):
-        # 1) validar stock actual
-        errores = []
-        stocks = {}
-        for l in carrito:
-            actual = sb.table("Inventario").select("stock").eq("id", l["id"]).execute().data
-            stocks[l["id"]] = actual[0]["stock"] if actual else 0
-        pedido = {}
-        for l in carrito:
-            pedido[l["id"]] = pedido.get(l["id"], 0) + l["cantidad"]
-        for pid, cant in pedido.items():
-            if stocks[pid] < cant:
-                errores.append(f"Stock insuficiente (ID {pid}): hay {stocks[pid]}, pides {cant}.")
-        if errores:
-            for e in errores:
-                st.error(e)
-        else:
-            # 2) registrar ventas (ingreso) y 3) descontar inventario
-            for l in carrito:
-                sb.table("Ventas").insert({
-                    "cliente": cliente, "documento": doc, "direccion": direccion,
-                    "ciudad": ciudad, "pais": pais, "responsable_iva": iva,
-                    "fecha": ahora_co().isoformat(),
-                    "producto_id": l["id"], "producto": l["producto"], "cantidad": l["cantidad"],
-                    "precio_unitario": l["precio"], "costo_unitario": l["costo"],
-                    "descuento_pct": l["descuento"], "total": l["total"]}).execute()
-            for pid, cant in pedido.items():
-                sb.table("Inventario").update({"stock": stocks[pid] - cant}).eq("id", pid).execute()
+        ok = False
+        try:
+            res = sb.rpc("registrar_venta", {
+                "p_cliente": {"cliente": cliente, "documento": doc, "direccion": direccion,
+                              "ciudad": ciudad, "pais": pais, "responsable_iva": iva},
+                "p_items": [{"id": l["id"], "cantidad": l["cantidad"], "descuento": l["descuento"]}
+                            for l in carrito]}).execute()
             st.session_state["carrito"] = []
-            refrescar()
-            st.session_state["msg"] = f"Venta registrada por {dinero(total_neto)}. Inventario e ingresos actualizados."
+            st.session_state["msg"] = (f"Venta registrada por {dinero(float(res.data))}. "
+                                       "Inventario e ingresos actualizados.")
+            ok = True
+        except Exception as e:
+            st.error(msg_error(e))
+        if ok:
             st.rerun()
 
 # ============================================================
@@ -518,57 +693,118 @@ elif menu == "📊 Soporte Contable":
             c3, c4 = st.columns(2)
             concepto = c3.text_input("Concepto (ej. Arriendo, Empaques)")
             monto = c4.number_input("Monto ($)", min_value=0.0, step=1000.0)
-            if st.form_submit_button("Registrar gasto"):
-                if not concepto.strip() or monto <= 0:
-                    st.error("Indica un concepto y un monto mayor que 0.")
-                else:
+            enviar = st.form_submit_button("Registrar gasto")
+        if enviar:
+            if not concepto.strip() or monto <= 0:
+                st.error("Indica un concepto y un monto mayor que 0.")
+            else:
+                try:
                     sb.table("Gastos").insert({"fecha": str(fecha_g), "tipo": tipo_g,
                                                "concepto": concepto.strip(), "monto": monto}).execute()
-                    refrescar()
                     st.success("Gasto registrado.")
+                except Exception as e:
+                    st.error(msg_error(e))
 
     with tab3:
+        eq = equipo()
+        nombres = dict(zip(eq["user_id"], eq["nombre"].fillna(eq["correo"]))) if not eq.empty else {}
         st.markdown("### Ventas")
-        st.dataframe(v.sort_values("fecha", ascending=False) if not v.empty else v,
-                     use_container_width=True, hide_index=True)
+        if v.empty:
+            st.info("Sin ventas registradas.")
+        else:
+            vt = v.sort_values("fecha", ascending=False).copy()
+            if "vendedor_id" in vt.columns:
+                vt["vendedor"] = vt["vendedor_id"].map(nombres).fillna("—")
+            vt = vt.drop(columns=[c for c in ["empresa_id", "vendedor_id", "dia"] if c in vt.columns])
+            st.dataframe(vt, use_container_width=True, hide_index=True)
         st.markdown("### Gastos")
-        st.dataframe(g.sort_values("fecha", ascending=False) if not g.empty else g,
-                     use_container_width=True, hide_index=True)
+        if g.empty:
+            st.info("Sin gastos registrados.")
+        else:
+            gt = g.sort_values("fecha", ascending=False)
+            gt = gt.drop(columns=[c for c in ["empresa_id", "registrado_por"] if c in gt.columns])
+            st.dataframe(gt, use_container_width=True, hide_index=True)
+
+# ============================================================
+#  EQUIPO (solo gerente)
+# ============================================================
+elif menu == "👥 Equipo":
+    st.title("👥 Equipo de trabajo")
+    eq = equipo()
+    if not eq.empty:
+        vista = eq.assign(rol=eq["rol"].map(ROLES), activo=eq["activo"].map({True: "Sí", False: "No"}))
+        st.dataframe(vista[["nombre", "correo", "rol", "activo"]], use_container_width=True, hide_index=True)
+
+    st.markdown("### Cambiar rol o desactivar a una persona")
+    otros = eq[eq["user_id"] != user.id] if not eq.empty else eq
+    if otros.empty:
+        st.info("Aún no hay otras personas en tu equipo. Invítalas con un código.")
+    else:
+        opciones = {f"{r['nombre'] or '—'} · {r['correo']}": r for _, r in otros.iterrows()}
+        sel = opciones[st.selectbox("Persona", list(opciones))]
+        c1, c2 = st.columns(2)
+        nuevo_rol = c1.selectbox("Rol", list(ROLES), index=list(ROLES).index(sel["rol"]),
+                                 format_func=lambda r: ROLES[r])
+        activo = c2.checkbox("Cuenta activa", value=bool(sel["activo"]))
+        if st.button("Guardar cambios"):
+            try:
+                sb.table("miembros").update({"rol": nuevo_rol, "activo": activo}).eq("user_id", sel["user_id"]).execute()
+                st.session_state["msg"] = "Cambios guardados."
+                st.rerun()
+            except Exception as e:
+                st.error(msg_error(e))
+
+    st.markdown("### Invitar a una persona")
+    st.caption("Genera un código, compártelo con la persona y que lo use en «Unirme con código». "
+               "Vence a los 7 días y sirve una sola vez.")
+    rol_inv = st.selectbox("Rol de la persona invitada", list(ROLES), index=3,
+                           format_func=lambda r: ROLES[r])
+    if st.button("Generar código"):
+        codigo = token_hex(4).upper()
+        try:
+            sb.table("invitaciones").insert({"codigo": codigo, "rol": rol_inv}).execute()
+            st.success("Código generado. Cópialo y envíalo:")
+            st.code(codigo)
+        except Exception as e:
+            st.error(msg_error(e))
+
+    pend = sb.table("invitaciones").select("codigo,rol,vence_en").eq("usada", False).execute().data or []
+    if pend:
+        st.markdown("#### Invitaciones pendientes")
+        dfp = pd.DataFrame(pend)
+        dfp["rol"] = dfp["rol"].map(ROLES)
+        st.dataframe(dfp, use_container_width=True, hide_index=True)
 
 # ============================================================
 #  PANEL ADMINISTRADOR
 # ============================================================
 elif menu == "⚙️ Panel Administrador":
     st.title("⚙️ Panel administrador")
-    pin_real = st.secrets.get("ADMIN_PIN")
-    if not pin_real:
-        st.warning("Define ADMIN_PIN en los secretos de la app para habilitar este panel.")
+    inv = inventario()
+    st.markdown("### Ajustar stock o eliminar producto")
+    if inv.empty:
+        st.info("No hay productos.")
     else:
-        pin = st.text_input("PIN de administrador", type="password")
-        if pin == str(pin_real):
-            inv = inventario()
-            st.markdown("### Ajustar stock o eliminar producto")
-            if inv.empty:
-                st.info("No hay productos.")
-            else:
-                sel = st.selectbox("Producto", inv["nombre"].tolist())
-                f = inv[inv["nombre"] == sel].iloc[0]
-                nuevo = st.number_input("Nuevo stock", min_value=0, value=int(f["stock"]))
-                c1, c2 = st.columns(2)
-                if c1.button("Guardar stock"):
-                    sb.table("Inventario").update({"stock": int(nuevo)}).eq("id", int(f["id"])).execute()
-                    refrescar()
-                    st.session_state["msg"] = "Stock actualizado."
-                    st.rerun()
-                if c2.button("🗑️ Eliminar producto"):
-                    sb.table("Inventario").delete().eq("id", int(f["id"])).execute()
-                    refrescar()
-                    st.session_state["msg"] = "Producto eliminado."
-                    st.rerun()
-            st.markdown("### Descargas")
-            d1, d2, d3 = st.columns(3)
-            d1.download_button("Inventario (CSV)", inventario().to_csv(index=False).encode(), "inventario.csv")
-            d2.download_button("Ventas (CSV)", ventas().to_csv(index=False).encode(), "ventas.csv")
-            d3.download_button("Gastos (CSV)", gastos().to_csv(index=False).encode(), "gastos.csv")
-        elif pin:
-            st.error("PIN incorrecto.")
+        sel = st.selectbox("Producto", inv["nombre"].tolist())
+        f = inv[inv["nombre"] == sel].iloc[0]
+        nuevo = st.number_input("Nuevo stock", min_value=0, value=int(f["stock"]))
+        c1, c2 = st.columns(2)
+        if c1.button("Guardar stock"):
+            try:
+                sb.table("Inventario").update({"stock": int(nuevo)}).eq("id", int(f["id"])).execute()
+                st.session_state["msg"] = "Stock actualizado."
+                st.rerun()
+            except Exception as e:
+                st.error(msg_error(e))
+        if c2.button("🗑️ Eliminar producto"):
+            try:
+                sb.table("Inventario").delete().eq("id", int(f["id"])).execute()
+                st.session_state["msg"] = "Producto eliminado."
+                st.rerun()
+            except Exception as e:
+                st.error(msg_error(e))
+    st.markdown("### Descargas")
+    d1, d2, d3 = st.columns(3)
+    d1.download_button("Inventario (CSV)", inventario().to_csv(index=False).encode(), "inventario.csv")
+    d2.download_button("Ventas (CSV)", ventas().to_csv(index=False).encode(), "ventas.csv")
+    d3.download_button("Gastos (CSV)", gastos().to_csv(index=False).encode(), "gastos.csv")
