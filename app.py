@@ -1,5 +1,5 @@
 # ============================================================
-#  SISTEMA DE GESTIÓN ADMINISTRATIVA · SIVAE v1.1
+#  SISTEMA DE GESTIÓN ADMINISTRATIVA · SIVAE v1.1 (Opción 2)
 # ============================================================
 from secrets import token_hex
 from datetime import date, datetime, timedelta
@@ -14,18 +14,31 @@ st.set_page_config(page_title="Sistema de gestión", page_icon="💎", layout="w
 SUPABASE_URL = "https://tqgmapwcknhdydjkbdtj.supabase.co"
 ZONA = "America/Bogota"
 
-VINO, VINO_OSCURO = "#8B1E3F", "#6E1731"
-MARFIL, MARFIL_OSC = "#F7F4EF", "#EDE7DD"
-TEXTO, GRIS, LINEA = "#1F2430", "#6B7280", "#E0D9CD"
+# --- Paleta Opción 2: Bosque y Salvia ---
+PRIMARIO = "#1F4E3D"       # Verde Bosque
+PRIMARIO_OSC = "#15362B"   # Verde más oscuro para hover
+SECUNDARIO = "#6B8F71"     # Verde Salvia
+FONDO = "#F9FAF9"          # Blanco Hueso
+FONDO_OSC = "#EDF1EE"      # Gris verdoso muy claro para sidebar
+TEXTO = "#2D3731"          # Gris verdoso oscuro
+GRIS = "#64748B"
 
 ROLES = {"gerente": "Gerente", "administrador": "Administrador", "contable": "Contable / Financiero", "ventas": "Ventas"}
 TODOS = list(ROLES)
+
+# Reorganización de menús por rol
 PAGINAS = {
-    "🏠 Inicio y Gráficos": TODOS, "📦 Inventario": TODOS, "💰 Registrar Venta (POS)": ["gerente", "administrador", "ventas"],
-    "➕ Agregar Producto": ["gerente", "administrador"], "🛒 Compras y proveedores": ["gerente", "administrador", "contable"],
-    "💳 Cuentas por pagar": ["gerente", "administrador", "contable"], "📊 Soporte Contable": ["gerente", "administrador", "contable"],
-    "📚 Contabilidad": ["gerente", "administrador", "contable"], "📄 Comprobantes y descargas": TODOS,
-    "👥 Equipo": ["gerente"], "⚙️ Panel Administrador": ["gerente", "administrador"],
+    "🏠 Inicio y Gráficos": TODOS,
+    "📦 Inventario": TODOS,
+    "💰 Registrar Venta (POS)": ["gerente", "administrador", "ventas"],
+    "➕ Agregar Producto": ["gerente", "administrador"],
+    "🛒 Compras y proveedores": ["gerente", "administrador", "contable"],
+    "💳 Cuentas por pagar": ["gerente", "administrador", "contable"],
+    "📊 Soporte Contable": ["gerente", "administrador", "contable"],
+    "📚 Contabilidad": ["gerente", "administrador", "contable"],
+    "📄 Comprobantes y descargas": TODOS,
+    "👥 Equipo": ["gerente"],
+    "⚙️ Panel Administrador": ["gerente", "administrador"],
 }
 
 def get_sb():
@@ -33,21 +46,22 @@ def get_sb():
     return st.session_state["sb"]
 sb = get_sb()
 
+# Aplicar colores CSS
 st.markdown(f"""
 <style>
-    .stApp {{ background-color: {MARFIL} !important; color: {TEXTO}; }}
-    [data-testid="stSidebar"] {{ background-color: {MARFIL_OSC} !important; border-right: 1px solid {LINEA}; }}
+    .stApp {{ background-color: {FONDO} !important; color: {TEXTO}; }}
+    [data-testid="stSidebar"] {{ background-color: {FONDO_OSC} !important; border-right: 1px solid {SECUNDARIO}; }}
     h1 {{ color: {TEXTO} !important; font-weight: 700; }}
-    h2, h3 {{ color: {VINO} !important; }}
-    div[data-testid="stMetric"] {{ background: #FFFFFF; padding: 16px 18px; border-radius: 12px; border: 1px solid {LINEA}; border-left: 4px solid {VINO}; }}
+    h2, h3 {{ color: {PRIMARIO} !important; }}
+    div[data-testid="stMetric"] {{ background: #FFFFFF; padding: 16px 18px; border-radius: 12px; border: 1px solid {SECUNDARIO}; border-left: 4px solid {PRIMARIO}; }}
     div[data-testid="stMetric"] label {{ color: {GRIS} !important; }}
-    div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {{ background-color: {VINO} !important; color: #FFFFFF !important; border: 1px solid {VINO} !important; border-radius: 8px; font-weight: 600; }}
-    div.stButton > button:hover, div.stFormSubmitButton > button:hover {{ background-color: {VINO_OSCURO} !important; }}
-    .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {{ background-color: #FFFFFF !important; color: {TEXTO} !important; border: 1px solid {LINEA} !important; }}
-    div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; border: 1px solid {LINEA} !important; }}
-    [data-testid="stExpander"] {{ background-color: #FFFFFF; border: 1px solid {LINEA}; border-radius: 10px; }}
+    div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {{ background-color: {PRIMARIO} !important; color: #FFFFFF !important; border: 1px solid {PRIMARIO} !important; border-radius: 8px; font-weight: 600; }}
+    div.stButton > button:hover, div.stFormSubmitButton > button:hover {{ background-color: {PRIMARIO_OSC} !important; }}
+    .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {{ background-color: #FFFFFF !important; color: {TEXTO} !important; border: 1px solid {SECUNDARIO} !important; }}
+    div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; border: 1px solid {SECUNDARIO} !important; }}
+    [data-testid="stExpander"] {{ background-color: #FFFFFF; border: 1px solid {SECUNDARIO}; border-radius: 10px; }}
     .stTabs [data-baseweb="tab"] {{ color: {GRIS}; }}
-    .stTabs [aria-selected="true"] {{ color: {VINO} !important; }}
+    .stTabs [aria-selected="true"] {{ color: {PRIMARIO} !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -59,7 +73,7 @@ def variacion(actual, anterior): return None if not anterior else (actual - ante
 
 def estilo_fig(fig, alto=360):
     fig.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=alto, margin=dict(l=10, r=10, t=40, b=10), legend=dict(orientation="h", y=-0.2), font=dict(color=TEXTO))
-    fig.update_xaxes(gridcolor=LINEA); fig.update_yaxes(gridcolor=LINEA); return fig
+    fig.update_xaxes(gridcolor="#E5E7EB"); fig.update_yaxes(gridcolor="#E5E7EB"); return fig
 
 def cargar(tabla):
     filas, ini = [], 0
@@ -210,12 +224,12 @@ if menu == "🏠 Inicio y Gráficos":
     izq, der = st.columns(2)
     with izq:
         st.markdown("### Ingresos (30 días)"); ini = hoy - timedelta(29); dias = pd.date_range(ini, hoy)
-        fig = go.Figure(go.Scatter(x=dias, y=serie_diaria(v, ini, hoy), mode="lines", fill="tozeroy", line=dict(color=VINO, width=2.5), fillcolor="rgba(139,30,63,0.15)"))
+        fig = go.Figure(go.Scatter(x=dias, y=serie_diaria(v, ini, hoy), mode="lines", fill="tozeroy", line=dict(color=PRIMARIO, width=2.5), fillcolor="rgba(31,78,61,0.15)"))
         st.plotly_chart(estilo_fig(fig), use_container_width=True)
     with der:
         st.markdown("### Top Productos"); vm = filtrar(v, "dia", hoy.replace(day=1), hoy)
         if not vm.empty:
-            top = vm.groupby("producto")["total"].sum().nlargest(5).sort_values(); fig = go.Figure(go.Bar(x=top.values, y=top.index, orientation="h", marker_color=VINO)); st.plotly_chart(estilo_fig(fig), use_container_width=True)
+            top = vm.groupby("producto")["total"].sum().nlargest(5).sort_values(); fig = go.Figure(go.Bar(x=top.values, y=top.index, orientation="h", marker_color=PRIMARIO)); st.plotly_chart(estilo_fig(fig), use_container_width=True)
     bajos = inv[inv["stock"] <= 5]
     if not bajos.empty: st.warning(f"⚠️ {len(bajos)} producto(s) con stock bajo."); st.dataframe(bajos[["nombre", "stock"]], use_container_width=True, hide_index=True)
 
