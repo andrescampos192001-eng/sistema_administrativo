@@ -327,10 +327,12 @@ elif menu == "📚 Contabilidad":
             if filas:
                 df = pd.DataFrame(filas); st.dataframe(df, use_container_width=True, hide_index=True)
                 st.markdown(f"**Débitos:** {dinero(df['Débito'].sum())} | **Créditos:** {dinero(df['Crédito'].sum())}")
-            else: st.info("No hay líneas de movimiento registradas.")
-        else: st.info("No hay movimientos contables registrados.")
+            else: 
+                st.info("No hay líneas de movimiento registradas.")
+        else: 
+            st.info("No hay movimientos contables registrados.")
 
-        with t2:
+    with t2:
         st.info("Calculando balances del mes actual...")
         
         st.markdown("### Balance de Comprobación")
@@ -340,9 +342,12 @@ elif menu == "📚 Contabilidad":
             st.dataframe(df_bal, use_container_width=True, hide_index=True)
             td, tc = df_bal["debito"].sum(), df_bal["credito"].sum()
             st.markdown(f"**Total Débitos:** {dinero(td)} | **Total Créditos:** {dinero(tc)}")
-            if abs(td - tc) < 0.01: st.success("✔ El balance cuadra perfectamente.")
-            else: st.error("✘ El balance NO cuadra.")
-        else: st.info("Sin movimientos en el período.")
+            if abs(td - tc) < 0.01: 
+                st.success("✔ El balance cuadra perfectamente.")
+            else: 
+                st.error("✘ El balance NO cuadra.")
+        else: 
+            st.info("Sin movimientos en el período.")
 
         st.markdown("### Estado de Resultados")
         r_res = sb.rpc("estado_resultados", {}).execute()
@@ -354,7 +359,9 @@ elif menu == "📚 Contabilidad":
             gastos = df_res[df_res["tipo"] == "gasto"]["saldo"].sum()
             utilidad = ingresos - costos - gastos
             st.markdown(f"**Utilidad del período:** {dinero(utilidad)}")
-        else: st.info("Sin movimientos en el período.")
+        else: 
+            st.info("Sin movimientos en el período.")
+
 elif menu == "📄 Comprobantes y descargas":
     st.title("📄 Comprobantes y descargas"); c1, c2, c3 = st.columns(3); ini_f = c1.date_input("Desde", value=hoy_co().replace(day=1)); fin_f = c2.date_input("Hasta", value=hoy_co()); tipo_f = c3.selectbox("Tipo", ["Todos", "venta", "compra", "egreso", "contable"])
     q = sb.table("comprobantes").select("*").gte("fecha", str(ini_f)).lte("fecha", str(fin_f) + "T23:59:59").order("fecha", desc=True)
