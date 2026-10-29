@@ -17,7 +17,6 @@ ZONA = "America/Bogota"
 VINO, VINO_OSCURO = "#8B1E3F", "#6E1731"
 MARFIL, MARFIL_OSC = "#F7F4EF", "#EDE7DD"
 TEXTO, GRIS, LINEA = "#1F2430", "#6B7280", "#E0D9CD"
-GRIS_CALIDO = "#B9AE9D"
 
 ROLES = {"gerente": "Gerente", "administrador": "Administrador", "contable": "Contable / Financiero", "ventas": "Ventas"}
 TODOS = list(ROLES)
@@ -125,12 +124,6 @@ def periodos(opcion, hoy):
     ini, fin = st.session_state.get("rango_personal", (hoy.replace(day=1), hoy)); largo = (fin - ini).days
     return (ini, fin), (ini - timedelta(largo + 1), ini - timedelta(1))
 
-def por_mes(df, col, rango, fecha, filtro=None):
-    if df.empty: return pd.Series(0.0, index=rango)
-    d = df if filtro is None else df[filtro(df)]
-    if d.empty: return pd.Series(0.0, index=rango)
-    return d.groupby(d[fecha].dt.to_period("M"))[col].sum().reindex(rango, fill_value=0.0)
-
 def serie_diaria(v, ini, fin):
     dias = pd.date_range(ini, fin); s = filtrar(v, "dia", ini, fin)
     if s.empty: return [0.0] * len(dias)
@@ -150,41 +143,41 @@ def cerrar_sesion():
 def pantalla_acceso():
     _, centro, _ = st.columns([1, 1.4, 1])
     with centro:
-        st.write(""); st.markdown("## 💎 Sistema de gestión administrativa"); st.caption("Inventario, ventas y contabilidad para tu empresa")
+        st.write(""); st.markdown("## 💎 Sistema de gestión"); st.caption("Inventario, ventas y contabilidad")
         t1, t2 = st.tabs(["Ingresar", "Crear cuenta"])
         with t1:
             with st.form("login"):
-                correo = st.text_input("Correo electrónico"); clave = st.text_input("Contraseña", type="password"); enviar = st.form_submit_button("Ingresar", use_container_width=True)
+                correo = st.text_input("Correo"); clave = st.text_input("Contraseña", type="password"); enviar = st.form_submit_button("Ingresar", use_container_width=True)
             if enviar:
                 try: sb.auth.sign_in_with_password({"email": correo.strip(), "password": clave}); st.rerun()
-                except Exception as e: st.error("Correo o contraseña incorrectos." if "not confirmed" not in msg_error(e).lower() else "Confirma tu correo.")
+                except Exception as e: st.error("Datos incorrectos." if "not confirmed" not in msg_error(e).lower() else "Confirma tu correo.")
         with t2:
             with st.form("registro"):
                 correo = st.text_input("Correo", key="rc"); clave = st.text_input("Contraseña (min 8)", type="password", key="rcl"); clave2 = st.text_input("Repite contraseña", type="password", key="rcl2"); enviar = st.form_submit_button("Crear cuenta", use_container_width=True)
             if enviar:
-                if "@" not in correo or len(clave) < 8: st.error("Correo inválido o contraseña menor a 8.")
+                if "@" not in correo or len(clave) < 8: st.error("Correo inválido o contraseña corta.")
                 elif clave != clave2: st.error("Las contraseñas no coinciden.")
                 else:
                     try:
                         res = sb.auth.sign_up({"email": correo.strip(), "password": clave})
                         if res.session: st.rerun()
-                        else: st.success("Cuenta creada. Revisa tu correo para confirmar.")
+                        else: st.success("Cuenta creada. Revisa tu correo.")
                     except Exception as e: st.error(msg_error(e))
 
 def pantalla_onboarding(user):
     _, centro, _ = st.columns([1, 1.4, 1])
     with centro:
-        st.write(""); st.markdown("## Bienvenido"); st.caption(f"Sesión iniciada como {user.email}")
-        t1, t2 = st.tabs(["🏢 Crear mi empresa", "🔑 Unirme con código"])
+        st.write(""); st.markdown("## Bienvenido"); st.caption(f"Sesión: {user.email}")
+        t1, t2 = st.tabs(["🏢 Crear empresa", "🔑 Unirme"])
         with t1:
             with st.form("crear_empresa"):
-                empresa = st.text_input("Nombre de la empresa"); nombre = st.text_input("Tu nombre"); enviar = st.form_submit_button("Crear empresa", use_container_width=True)
+                empresa = st.text_input("Nombre empresa"); nombre = st.text_input("Tu nombre"); enviar = st.form_submit_button("Crear", use_container_width=True)
             if enviar:
                 try: sb.rpc("crear_empresa", {"p_nombre": empresa, "p_nombre_usuario": nombre}).execute(); st.rerun()
                 except Exception as e: st.error(msg_error(e))
         with t2:
             with st.form("unirse"):
-                codigo = st.text_input("Código de invitación"); nombre = st.text_input("Tu nombre", key="nu"); enviar = st.form_submit_button("Unirme a la empresa", use_container_width=True)
+                codigo = st.text_input("Código"); nombre = st.text_input("Tu nombre", key="nu"); enviar = st.form_submit_button("Unirme", use_container_width=True)
             if enviar:
                 try: sb.rpc("unirse_con_invitacion", {"p_codigo": codigo, "p_nombre_usuario": nombre}).execute(); st.rerun()
                 except Exception as e: st.error(msg_error(e))
@@ -194,11 +187,10 @@ user = usuario_actual()
 if user is None: pantalla_acceso(); st.stop()
 perfil = cargar_perfil(user.id)
 if perfil is None: pantalla_onboarding(user); st.stop()
-if not perfil["activo"]: st.error("Tu cuenta fue desactivada."); st.stop()
+if not perfil["activo"]: st.error("Cuenta desactivada."); st.stop()
 
-rol = perfil["rol"]; empresa_nombre = (perfil.get("empresas") or {}).get("nombre", ""); empresa_id = perfil["empresa_id"]
+rol = perfil["rol"]; empresa_nombre = (perfil.get("empresas") or {}).get("nombre", "")
 
-def datos_empresa(): return {"nombre": (sb.table("empresas").select("nombre").eq("id", empresa_id).execute().data or [{"nombre": empresa_nombre}])[0]["nombre"]}
 def df_a_items(df):
     if df.empty: return []
     return [{"tipo": r["tipo"], "numero": gd.formatear_numero(r["tipo"], r["consecutivo"]), "fecha": str(r["fecha"]), "tercero": r.get("tercero") or "", "total": float(r.get("total") or 0), "estado": r.get("estado") or "emitido", "datos": r.get("datos") or {}} for _, r in df.iterrows()]
@@ -211,37 +203,27 @@ if "carrito_compra" not in st.session_state: st.session_state["carrito_compra"] 
 if "msg" in st.session_state: st.success(st.session_state.pop("msg"))
 
 if menu == "🏠 Inicio y Gráficos":
-    st.title(empresa_nombre or "Inicio")
-    inv, v, g = inventario(), ventas(), gastos(); hoy = hoy_co(); mes = resumen(v, g, hoy.replace(day=1), hoy)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("📦 Modelos", len(inv)); c2.metric("🧮 Unidades", f"{int(inv['stock'].sum()):,}")
+    st.title(empresa_nombre or "Inicio"); inv, v, g = inventario(), ventas(), gastos(); hoy = hoy_co(); mes = resumen(v, g, hoy.replace(day=1), hoy)
+    c1, c2, c3, c4 = st.columns(4); c1.metric("📦 Modelos", len(inv)); c2.metric("🧮 Unidades", f"{int(inv['stock'].sum()):,}")
     if rol == "ventas": c3.metric("💰 Mis ventas", dinero(mes["Ingresos"])); c4.metric("🧾 N.º ventas", mes["N.º de ventas"])
     else: c3.metric("💰 Ingresos", dinero(mes["Ingresos"])); c4.metric("📈 Utilidad neta", dinero(mes["Utilidad neta"]))
     izq, der = st.columns(2)
     with izq:
-        st.markdown("### Ingresos (30 días)")
-        ini = hoy - timedelta(29); dias = pd.date_range(ini, hoy)
+        st.markdown("### Ingresos (30 días)"); ini = hoy - timedelta(29); dias = pd.date_range(ini, hoy)
         fig = go.Figure(go.Scatter(x=dias, y=serie_diaria(v, ini, hoy), mode="lines", fill="tozeroy", line=dict(color=VINO, width=2.5), fillcolor="rgba(139,30,63,0.15)"))
         st.plotly_chart(estilo_fig(fig), use_container_width=True)
     with der:
-        st.markdown("### Top Productos")
-        vm = filtrar(v, "dia", hoy.replace(day=1), hoy)
+        st.markdown("### Top Productos"); vm = filtrar(v, "dia", hoy.replace(day=1), hoy)
         if not vm.empty:
-            top = vm.groupby("producto")["total"].sum().nlargest(5).sort_values()
-            fig = go.Figure(go.Bar(x=top.values, y=top.index, orientation="h", marker_color=VINO))
-            st.plotly_chart(estilo_fig(fig), use_container_width=True)
-        else: st.info("Sin ventas este mes.")
+            top = vm.groupby("producto")["total"].sum().nlargest(5).sort_values(); fig = go.Figure(go.Bar(x=top.values, y=top.index, orientation="h", marker_color=VINO)); st.plotly_chart(estilo_fig(fig), use_container_width=True)
     bajos = inv[inv["stock"] <= 5]
     if not bajos.empty: st.warning(f"⚠️ {len(bajos)} producto(s) con stock bajo."); st.dataframe(bajos[["nombre", "stock"]], use_container_width=True, hide_index=True)
 
 elif menu == "📦 Inventario":
     st.title("📦 Inventario"); inv = inventario()
-    if inv.empty: st.info("No hay productos.")
-    else:
-        buscar = st.text_input("🔎 Buscar")
-        vista = inv[inv["nombre"].str.contains(buscar, case=False, na=False)] if buscar else inv
-        vista = vista.drop(columns=[c for c in ["empresa_id"] if c in vista.columns])
-        c1, c2, c3 = st.columns(3); c1.metric("Modelos", len(vista)); c2.metric("Unidades", f"{int(vista['stock'].sum()):,}")
+    if not inv.empty:
+        buscar = st.text_input("🔎 Buscar"); vista = inv[inv["nombre"].str.contains(buscar, case=False, na=False)] if buscar else inv
+        vista = vista.drop(columns=[c for c in ["empresa_id"] if c in vista.columns]); c1, c2, c3 = st.columns(3); c1.metric("Modelos", len(vista)); c2.metric("Unidades", f"{int(vista['stock'].sum()):,}")
         if rol == "ventas": vista = vista.drop(columns=["costo"])
         else: c3.metric("Valor costo", dinero((vista["costo"] * vista["stock"]).sum()))
         st.dataframe(vista, use_container_width=True, hide_index=True)
@@ -252,26 +234,20 @@ elif menu == "➕ Agregar Producto":
         c1, c2 = st.columns(2); nombre = c1.text_input("Nombre"); categoria = c2.text_input("Categoría")
         c3, c4, c5 = st.columns(3); costo = c3.number_input("Costo ($)", min_value=0.0); precio = c4.number_input("Precio ($)", min_value=0.0); stock = c5.number_input("Stock", min_value=0)
         if st.form_submit_button("Guardar"):
-            if not nombre.strip(): st.error("Nombre obligatorio.")
-            else:
+            if nombre.strip():
                 try: sb.table("Inventario").insert({"nombre": nombre.strip(), "categoria": categoria.strip(), "costo": costo, "precio": precio, "stock": int(stock)}).execute(); st.success("Guardado.")
                 except Exception as e: st.error(msg_error(e))
 
 elif menu == "💰 Registrar Venta (POS)":
     st.title("💰 Registrar venta"); inv = inventario(); disp = inv[inv["stock"] > 0]
     with st.expander("👤 Cliente", expanded=True):
-        c1, c2 = st.columns(2); cliente = c1.text_input("Nombre"); doc = c2.text_input("Documento")
-        direccion = st.text_input("Dirección")
+        c1, c2 = st.columns(2); cliente = c1.text_input("Nombre"); doc = c2.text_input("Documento"); direccion = st.text_input("Dirección")
         c3, c4, c5, c6 = st.columns(4); ciudad = c3.text_input("Ciudad"); pais = c4.text_input("País", value="Colombia"); iva = c5.selectbox("IVA", ["No", "Sí"]); forma_pago = c6.selectbox("Pago", ["efectivo", "transferencia"])
-    if disp.empty: st.warning("No hay stock.")
-    else:
-        c_prod, c_cant, c_desc = st.columns(3)
-        nombre_sel = c_prod.selectbox("Producto", disp["nombre"].tolist()); fila = disp[disp["nombre"] == nombre_sel].iloc[0]
+    if not disp.empty:
+        c_prod, c_cant, c_desc = st.columns(3); nombre_sel = c_prod.selectbox("Producto", disp["nombre"].tolist()); fila = disp[disp["nombre"] == nombre_sel].iloc[0]
         ya = sum(l["cantidad"] for l in st.session_state["carrito"] if l["id"] == int(fila["id"])); maximo = int(fila["stock"]) - ya
-        c_prod.caption(f"Precio: {dinero(fila['precio'])} · Disp: {maximo}")
-        cantidad = c_cant.number_input("Cantidad", min_value=1, max_value=max(maximo, 1), value=1)
-        desc_op = c_desc.selectbox("Desc (%)", [0, 5, 10, 15, 20, "Otro"])
-        desc = c_desc.number_input("Otro %", 0.0, 100.0, 0.0) if desc_op == "Otro" else float(desc_op)
+        c_prod.caption(f"Precio: {dinero(fila['precio'])} · Disp: {maximo}"); cantidad = c_cant.number_input("Cantidad", min_value=1, max_value=max(maximo, 1), value=1)
+        desc_op = c_desc.selectbox("Desc (%)", [0, 5, 10, 15, 20, "Otro"]); desc = c_desc.number_input("Otro %", 0.0, 100.0, 0.0) if desc_op == "Otro" else float(desc_op)
         if st.button("Agregar"):
             if maximo < 1: st.error("Sin stock.")
             else: st.session_state["carrito"].append({"id": int(fila["id"]), "producto": nombre_sel, "cantidad": int(cantidad), "precio": float(fila["precio"]), "descuento": float(desc), "total": round(cantidad * float(fila["precio"]) * (1 - desc / 100), 2)}); st.rerun()
@@ -299,12 +275,10 @@ elif menu == "🛒 Compras y proveedores":
     st.title("🛒 Compras y proveedores"); t1, t2, t3 = st.tabs(["🏭 Proveedores", "🧾 Nueva", "📜 Historial"])
     with t1:
         with st.form("nuevo_proveedor", clear_on_submit=True):
-            c1, c2 = st.columns(2); nombre = c1.text_input("Nombre"); nit = c2.text_input("NIT")
-            c3, c4 = st.columns(2); contacto = c3.text_input("Contacto"); telefono = c4.text_input("Teléfono")
-            c5, c6 = st.columns(2); correo = c5.text_input("Correo"); direccion = c6.text_input("Dirección")
-            c7, c8 = st.columns(2); plazo = c7.number_input("Plazo días", min_value=0); activo = c8.checkbox("Activo", value=True)
+            c1, c2 = st.columns(2); nombre = c1.text_input("Nombre"); nit = c2.text_input("NIT"); c3, c4 = st.columns(2); contacto = c3.text_input("Contacto"); telefono = c4.text_input("Teléfono")
+            c5, c6 = st.columns(2); correo = c5.text_input("Correo"); direccion = c6.text_input("Dirección"); c7, c8 = st.columns(2); plazo = c7.number_input("Plazo días", min_value=0); activo = c8.checkbox("Activo", value=True)
             if st.form_submit_button("Guardar"):
-                try: sb.table("proveedores").insert({"nombre": nombre.strip(), "nit": nit.strip(), "contacto": contacto.strip(), "telefono": telefono.strip(), "correo": correo.strip(), "direccion": direccion.strip(), "plazo_dias": int(plazo), "activo": activo}).execute(); st.success("Proveedor guardado.")
+                try: sb.table("proveedores").insert({"nombre": nombre.strip(), "nit": nit.strip(), "contacto": contacto.strip(), "telefono": telefono.strip(), "correo": correo.strip(), "direccion": direccion.strip(), "plazo_dias": int(plazo), "activo": activo}).execute(); st.success("Guardado.")
                 except Exception as e: st.error(msg_error(e))
         r = sb.table("proveedores").select("*").order("nombre").execute()
         if r.data: st.dataframe(pd.DataFrame(r.data), use_container_width=True, hide_index=True)
@@ -330,8 +304,7 @@ elif menu == "🛒 Compras y proveedores":
 elif menu == "💳 Cuentas por pagar":
     st.title("💳 Cuentas por pagar"); rc = sb.table("cuentas_por_pagar").select("*,proveedores(nombre)").order("vence_en").execute(); df = pd.DataFrame(rc.data or [])
     if not df.empty:
-        df["saldo"] = pd.to_numeric(df["saldo"]); st.metric("Total adeudado", dinero(df["saldo"].sum()))
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        df["saldo"] = pd.to_numeric(df["saldo"]); st.metric("Total adeudado", dinero(df["saldo"].sum())); st.dataframe(df, use_container_width=True, hide_index=True)
         abiertas = df[df["estado"].isin(["pendiente", "parcial"])]
         if not abiertas.empty:
             cxp_id = st.selectbox("Cuenta", abiertas["id"].tolist()); valor = st.number_input("Valor a pagar", min_value=0.0, max_value=float(abiertas[abiertas["id"] == cxp_id].iloc[0]["saldo"]))
@@ -348,72 +321,9 @@ elif menu == "📚 Contabilidad":
             for a in r.data:
                 for l in a.get("asiento_lineas", []): filas.append({"Número": f"CD-{a['numero']:06d}", "Fecha": str(a["fecha"])[:10], "Desc": a.get("descripcion"), "Débito": l.get("debito") or 0, "Crédito": l.get("credito") or 0})
             df = pd.DataFrame(filas); st.dataframe(df, use_container_width=True, hide_index=True); st.markdown(f"**Débitos:** {dinero(df['Débito'].sum())} | **Créditos:** {dinero(df['Crédito'].sum())}")
-    with t2:
-        st.info("Balances calculados por RPC.")
+    with t2: st.info("Balances calculados por RPC.")
 
 elif menu == "📄 Comprobantes y descargas":
     st.title("📄 Comprobantes y descargas"); c1, c2, c3 = st.columns(3); ini_f = c1.date_input("Desde", value=hoy_co().replace(day=1)); fin_f = c2.date_input("Hasta", value=hoy_co()); tipo_f = c3.selectbox("Tipo", ["Todos", "venta", "compra", "egreso", "contable"])
     q = sb.table("comprobantes").select("*").gte("fecha", str(ini_f)).lte("fecha", str(fin_f) + "T23:59:59").order("fecha", desc=True)
-    if tipo_f != "Todos": q = q.eq("tipo", tipo_f)
-    r = q.execute(); df = pd.DataFrame(r.data or [])
-    if not df.empty:
-        df["numero"] = df.apply(lambda x: gd.formatear_numero(x["tipo"], x["consecutivo"]), axis=1); st.dataframe(df[["numero", "fecha", "tercero", "total", "estado"]], use_container_width=True, hide_index=True)
-        sel = st.multiselect("Seleccionar", df["numero"].tolist())
-        if sel: st.download_button("⬇️ ZIP", gd.zip_comprobantes(empresa_nombre, df_a_items(df[df["numero"].isin(sel)])), f"{gd.slug(empresa_nombre)}.zip", "application/zip")
-        st.download_button("⬇️ Índice CSV", gd.indice_csv(df_a_items(df)), "indice.csv", "text/csv")
-
-elif menu == "📊 Soporte Contable":
-    st.title("📊 Soporte contable"); v, g = ventas(), gastos(); hoy = hoy_co(); tab1, tab2, tab3 = st.tabs(["📈 Análisis", "🧾 Gasto", "📒 Libro"])
-    with tab1:
-        opcion = st.selectbox("Comparar", ["Mes actual vs mes anterior", "Hoy vs ayer", "Últimos 7 días vs 7 anteriores", "Rango personalizado"])
-        if opcion == "Rango personalizado":
-            r = st.date_input("Rango", value=(hoy.replace(day=1), hoy))
-            if isinstance(r, tuple) and len(r) == 2: st.session_state["rango_personal"] = r
-        (a_ini, a_fin), (p_ini, p_fin) = periodos(opcion, hoy); act, ant = resumen(v, g, a_ini, a_fin), resumen(v, g, p_ini, p_fin)
-        def tarjeta(col, nombre, inverso=False):
-            var = variacion(act[nombre], ant[nombre]); col.metric(nombre, dinero(act[nombre]), delta=None if var is None else f"{var:+.1f}%", delta_color="inverse" if inverso else "normal")
-        m = st.columns(4); tarjeta(m[0], "Ingresos"); tarjeta(m[1], "Utilidad bruta"); tarjeta(m[2], "Gastos totales", inverso=True); tarjeta(m[3], "Utilidad neta")
-        st.markdown("### Detalle"); filas = []
-        for k in ["Ingresos", "Costo de ventas", "Utilidad bruta", "Gastos fijos", "Gastos variables", "Gastos totales", "Utilidad neta"]:
-            var = variacion(act[k], ant[k]); filas.append({"Indicador": k, "Actual": dinero(act[k]), "Anterior": dinero(ant[k]), "Var": "—" if var is None else f"{var:+.1f}%"})
-        st.dataframe(pd.DataFrame(filas).astype(str), use_container_width=True, hide_index=True)
-    with tab2:
-        with st.form("nuevo_gasto", clear_on_submit=True):
-            c1, c2 = st.columns(2); fecha_g = c1.date_input("Fecha", value=hoy, max_value=hoy); tipo_g = c2.selectbox("Tipo", ["Fijo", "Variable"])
-            c3, c4 = st.columns(2); concepto = c3.text_input("Concepto"); monto = c4.number_input("Monto", min_value=0.0); forma_g = st.selectbox("Pago", ["efectivo", "transferencia", "por_pagar"])
-            if st.form_submit_button("Registrar"):
-                if concepto.strip() and monto > 0:
-                    try: sb.rpc("registrar_gasto", {"p_fecha": str(fecha_g), "p_tipo": tipo_g, "p_concepto": concepto.strip(), "p_monto": float(monto), "p_forma_pago": forma_g}).execute(); st.success("Guardado.")
-                    except Exception as e: st.error(msg_error(e))
-    with tab3:
-        eq = equipo(); nombres = dict(zip(eq["user_id"], eq["nombre"].fillna(eq["correo"]))) if not eq.empty else {}
-        if not v.empty: vt = v.sort_values("fecha", ascending=False).copy(); vt["vendedor"] = vt["vendedor_id"].map(nombres).fillna("—") if "vendedor_id" in vt.columns else "—"; st.dataframe(vt.drop(columns=[c for c in ["empresa_id", "vendedor_id", "dia"] if c in vt.columns]), use_container_width=True)
-
-elif menu == "👥 Equipo":
-    st.title("👥 Equipo"); eq = equipo()
-    if not eq.empty:
-        vista = eq.assign(rol=eq["rol"].map(ROLES), activo=eq["activo"].map({True: "Sí", False: "No"})); st.dataframe(vista[["nombre", "correo", "rol", "activo"]], use_container_width=True, hide_index=True)
-        otros = eq[eq["user_id"] != user.id]
-        if not otros.empty:
-            opciones = {f"{r['nombre'] or '—'} · {r['correo']}": r for _, r in otros.iterrows()}; sel = opciones[st.selectbox("Persona", list(opciones))]
-            c1, c2 = st.columns(2); nuevo_rol = c1.selectbox("Rol", list(ROLES), index=list(ROLES).index(sel["rol"]), format_func=lambda r: ROLES[r]); activo = c2.checkbox("Activo", value=bool(sel["activo"]))
-            if st.button("Guardar"):
-                try: sb.table("miembros").update({"rol": nuevo_rol, "activo": activo}).eq("user_id", sel["user_id"]).execute(); st.rerun()
-                except Exception as e: st.error(msg_error(e))
-    st.markdown("### Invitar")
-    rol_inv = st.selectbox("Rol", list(ROLES), index=3, format_func=lambda r: ROLES[r])
-    if st.button("Generar código"):
-        codigo = token_hex(4).upper()
-        try: sb.table("invitaciones").insert({"codigo": codigo, "rol": rol_inv}).execute(); st.success("Código:"); st.code(codigo)
-        except Exception as e: st.error(msg_error(e))
-
-elif menu == "⚙️ Panel Administrador":
-    st.title("⚙️ Panel"); inv = inventario()
-    if not inv.empty:
-        sel = st.selectbox("Producto", inv["nombre"].tolist()); f = inv[inv["nombre"] == sel].iloc[0]; nuevo = st.number_input("Nuevo stock", min_value=0, value=int(f["stock"])); c1, c2 = st.columns(2)
-        if c1.button("Guardar stock"): sb.table("Inventario").update({"stock": int(nuevo)}).eq("id", int(f["id"])).execute(); st.rerun()
-        if c2.button("🗑️ Eliminar"): sb.table("Inventario").delete().eq("id", int(f["id"])).execute(); st.rerun()
-    st.markdown("### Descargas"); d1, d2, d3 = st.columns(3)
-    d1.download_button("Inventario (CSV)", inventario().to_csv(index=False).encode(), "inventario.csv")
-    d2.download_button("Ventas (CSV)", ventas().to_csv(index=False).encode(), "ventas.csv")
-    d3.download_button("Gastos (CSV)", gastos().to_csv(index=False).encode(), "gastos.csv")
+    if tipo_f != "Todos":
