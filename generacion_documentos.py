@@ -17,12 +17,12 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-# --- Paleta Opción 2: Bosque y Salvia ---
-PRIMARIO = colors.HexColor("#1F4E3D")
-TEXTO = colors.HexColor("#2D3731")
-GRIS = colors.HexColor("#64748B")
+# --- Paleta Azul Ejecutivo ---
+PRIMARIO = colors.HexColor("#1E3A8A")
+TEXTO = colors.HexColor("#111827")
+GRIS = colors.HexColor("#6B7280")
 LINEA = colors.HexColor("#E5E7EB")
-FONDO_SUAVE = colors.HexColor("#EDF1EE")
+FONDO_SUAVE = colors.HexColor("#F8F9FA")
 
 CARPETAS = {"venta": "Ventas", "compra": "Compras", "egreso": "Egresos", "contable": "Contables"}
 PREFIJOS = {"venta": "VEN", "compra": "COM", "egreso": "EGR", "contable": "CD"}
@@ -105,7 +105,7 @@ def _canvas_con_pie(pie, marca):
             self.restoreState()
             if marca:
                 self.saveState()
-                self.setFillColor(colors.Color(0.12, 0.3, 0.24, alpha=0.13))
+                self.setFillColor(colors.Color(0.11, 0.22, 0.54, alpha=0.13))
                 self.setFont("Helvetica-Bold", 96)
                 self.translate(ancho / 2, alto / 2)
                 self.rotate(40)
