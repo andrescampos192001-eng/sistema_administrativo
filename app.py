@@ -326,4 +326,59 @@ elif menu == "📚 Contabilidad":
 elif menu == "📄 Comprobantes y descargas":
     st.title("📄 Comprobantes y descargas"); c1, c2, c3 = st.columns(3); ini_f = c1.date_input("Desde", value=hoy_co().replace(day=1)); fin_f = c2.date_input("Hasta", value=hoy_co()); tipo_f = c3.selectbox("Tipo", ["Todos", "venta", "compra", "egreso", "contable"])
     q = sb.table("comprobantes").select("*").gte("fecha", str(ini_f)).lte("fecha", str(fin_f) + "T23:59:59").order("fecha", desc=True)
-    if tipo_f != "Todos":
+    if tipo_f != "Todos": q = q.eq("tipo", tipo_f)
+    r = q.execute(); df = pd.DataFrame(r.data or [])
+    if not df.empty:
+        df["numero"] = df.apply(lambda x: gd.formatear_numero(x["tipo"], x["consecutivo"]), axis=1); st.dataframe(df[["numero", "fecha", "tercero", "total", "estado"]], use_container_width=True, hide_index=True)
+        sel = st.multiselect("Seleccionar", df["numero"].tolist())
+        if sel: st.download_button("⬇️ ZIP", gd.zip_comprobantes(empresa_nombre, df_a_items(df[df["numero"].isin(sel)])), f"{gd.slug(empresa_nombre)}.zip", "application/zip")
+        st.download_button("⬇️ CSV", gd.indice_csv(df_a_items(df)), "indice.csv", "text/csv")
+
+elif menu == "📊 Soporte Contable":
+    st.title("📊 Soporte contable"); v, g = ventas(), gastos(); hoy = hoy_co(); tab1, tab2, tab3 = st.tabs(["📈 Análisis", "🧾 Gasto", "📒 Libro"])
+    with tab1:
+        opcion = st.selectbox("Comparar", ["Mes actual vs mes anterior", "Hoy vs ayer", "Últimos 7 días vs 7 anteriores", "Rango personalizado"])
+        if opcion == "Rango personalizado":
+            r = st.date_input("Rango", value=(hoy.replace(day=1), hoy))
+            if isinstance(r, tuple) and len(r) == 2: st.session_state["rango_personal"] = r
+        (a_ini, a_fin), (p_ini, p_fin) = periodos(opcion, hoy); act, ant = resumen(v, g, a_ini, a_fin), resumen(v, g, p_ini, p_fin)
+        def tarjeta(col, nombre, inverso=False):
+            var = variacion(act[nombre], ant[nombre]); col.metric(nombre, dinero(act[nombre]), delta=None if var is None else f"{var:+.1f}%", delta_color="inverse" if inverso else "normal")
+        m = st.columns(4); tarjeta(m[0], "Ingresos"); tarjeta(m[1], "Utilidad bruta"); tarjeta(m[2], "Gastos totales", inverso=True); tarjeta(m[3], "Utilidad neta")
+    with tab2:
+        with st.form("nuevo_gasto", clear_on_submit=True):
+            c1, c2 = st.columns(2); fecha_g = c1.date_input("Fecha", value=hoy, max_value=hoy); tipo_g = c2.selectbox("Tipo", ["Fijo", "Variable"])
+            c3, c4 = st.columns(2); concepto = c3.text_input("Concepto"); monto = c4.number_input("Monto", min_value=0.0); forma_g = st.selectbox("Pago", ["efectivo", "transferencia", "por_pagar"])
+            if st.form_submit_button("Registrar"):
+                if concepto.strip() and monto > 0:
+                    try: sb.rpc("registrar_gasto", {"p_fecha": str(fecha_g), "p_tipo": tipo_g, "p_concepto": concepto.strip(), "p_monto": float(monto), "p_forma_pago": forma_g}).execute(); st.success("Guardado.")
+                    except Exception as e: st.error(msg_error(e))
+    with tab3:
+        eq = equipo(); nombres = dict(zip(eq["user_id"], eq["nombre"].fillna(eq["correo"]))) if not eq.empty else {}
+        if not v.empty: vt = v.sort_values("fecha", ascending=False).copy(); vt["vendedor"] = vt["vendedor_id"].map(nombres).fillna("—") if "vendedor_id" in vt.columns else "—"; st.dataframe(vt.drop(columns=[c for c in ["empresa_id", "vendedor_id", "dia"] if c in vt.columns]), use_container_width=True)
+
+elif menu == "👥 Equipo":
+    st.title("👥 Equipo"); eq = equipo()
+    if not eq.empty:
+        vista = eq.assign(rol=eq["rol"].map(ROLES), activo=eq["activo"].map({True: "Sí", False: "No"})); st.dataframe(vista[["nombre", "correo", "rol", "activo"]], use_container_width=True, hide_index=True)
+        otros = eq[eq["user_id"] != user.id]
+        if not otros.empty:
+            opciones = {f"{r['nombre'] or '—'} · {r['correo']}": r for _, r in otros.iterrows()}; sel = opciones[st.selectbox("Persona", list(opciones))]
+            c1, c2 = st.columns(2); nuevo_rol = c1.selectbox("Rol", list(ROLES), index=list(ROLES).index(sel["rol"]), format_func=lambda r: ROLES[r]); activo = c2.checkbox("Activo", value=bool(sel["activo"]))
+            if st.button("Guardar"):
+                try: sb.table("miembros").update({"rol": nuevo_rol, "activo": activo}).eq("user_id", sel["user_id"]).execute(); st.rerun()
+                except Exception as e: st.error(msg_error(e))
+    st.markdown("### Invitar"); rol_inv = st.selectbox("Rol", list(ROLES), index=3, format_func=lambda r: ROLES[r])
+    if st.button("Generar código"):
+        codigo = token_hex(4).upper()
+        try: sb.table("invitaciones").insert({"codigo": codigo, "rol": rol_inv}).execute(); st.success("Código:"); st.code(codigo)
+        except Exception as e: st.error(msg_error(e))
+
+elif menu == "⚙️ Panel Administrador":
+    st.title("⚙️ Panel"); inv = inventario()
+    if not inv.empty:
+        sel = st.selectbox("Producto", inv["nombre"].tolist()); f = inv[inv["nombre"] == sel].iloc[0]; nuevo = st.number_input("Nuevo stock", min_value=0, value=int(f["stock"])); c1, c2 = st.columns(2)
+        if c1.button("Guardar stock"): sb.table("Inventario").update({"stock": int(nuevo)}).eq("id", int(f["id"])).execute(); st.rerun()
+        if c2.button("🗑️ Eliminar"): sb.table("Inventario").delete().eq("id", int(f["id"])).execute(); st.rerun()
+    st.markdown("### Descargas"); d1, d2, d3 = st.columns(3)
+    d1.download_button("Inventario (CSV)", inventario().to_csv(index=False).encode(), "inventario.csv"); d2.download_button("Ventas (CSV)", ventas().to_csv(index=False).encode(), "ventas.csv"); d3.download_button("Gastos (CSV)", gastos().to_csv(index=False).encode(), "gastos.csv")
