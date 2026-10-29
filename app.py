@@ -1,5 +1,5 @@
 # ============================================================
-#  SISTEMA DE GESTIÓN ADMINISTRATIVA · SIVAE v1.1 (Opción 1)
+#  SISTEMA DE GESTIÓN ADMINISTRATIVA · SIVAE v1.1 (Azul Ejecutivo)
 # ============================================================
 from secrets import token_hex
 from datetime import date, datetime, timedelta
@@ -14,14 +14,14 @@ st.set_page_config(page_title="Sistema de gestión", page_icon="💎", layout="w
 SUPABASE_URL = "https://tqgmapwcknhdydjkbdtj.supabase.co"
 ZONA = "America/Bogota"
 
-# --- Paleta Opción 1: Pizarra y Acero ---
-PRIMARIO = "#334155"       # Pizarra oscuro
-PRIMARIO_OSC = "#1E293B"   # Pizarra más oscuro
-SECUNDARIO = "#0284C7"     # Azul acero
-FONDO = "#F8FAFC"          # Gris azulado muy claro
-FONDO_OSC = "#F1F5F9"      # Fondo sidebar
-TEXTO = "#0F172A"          # Texto casi negro
-GRIS = "#64748B"           # Gris para textos secundarios
+# --- Paleta Azul Ejecutivo ---
+PRIMARIO = "#1E3A8A"       # Azul empresarial oscuro (Sidebar)
+PRIMARIO_OSC = "#172554"   # Azul más oscuro para hover
+SECUNDARIO = "#2563EB"     # Azul brillante (Botones/Acentos)
+FONDO = "#F8F9FA"          # Blanco Hueso
+FONDO_OSC = "#FFFFFF"      # Blanco puro para tarjetas
+TEXTO = "#111827"          # Gris casi negro
+GRIS = "#6B7280"           # Gris para textos secundarios
 
 ROLES = {"gerente": "Gerente", "administrador": "Administrador", "contable": "Contable / Financiero", "ventas": "Ventas"}
 TODOS = list(ROLES)
@@ -41,18 +41,20 @@ sb = get_sb()
 st.markdown(f"""
 <style>
     .stApp {{ background-color: {FONDO} !important; color: {TEXTO}; }}
-    [data-testid="stSidebar"] {{ background-color: {FONDO_OSC} !important; border-right: 1px solid {SECUNDARIO}; }}
+    [data-testid="stSidebar"] {{ background-color: {PRIMARIO} !important; border-right: none; }}
+    [data-testid="stSidebar"] * {{ color: #FFFFFF !important; }}
+    [data-testid="stSidebar"] .stRadio label {{ color: #FFFFFF !important; }}
     h1 {{ color: {TEXTO} !important; font-weight: 700; }}
     h2, h3 {{ color: {PRIMARIO} !important; }}
-    div[data-testid="stMetric"] {{ background: #FFFFFF; padding: 16px 18px; border-radius: 12px; border: 1px solid {SECUNDARIO}; border-left: 4px solid {PRIMARIO}; }}
+    div[data-testid="stMetric"] {{ background: {FONDO_OSC}; padding: 16px 18px; border-radius: 8px; border: 1px solid #E5E7EB; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
     div[data-testid="stMetric"] label {{ color: {GRIS} !important; }}
-    div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {{ background-color: {PRIMARIO} !important; color: #FFFFFF !important; border: 1px solid {PRIMARIO} !important; border-radius: 8px; font-weight: 600; }}
-    div.stButton > button:hover, div.stFormSubmitButton > button:hover {{ background-color: {PRIMARIO_OSC} !important; }}
-    .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {{ background-color: #FFFFFF !important; color: {TEXTO} !important; border: 1px solid {SECUNDARIO} !important; }}
-    div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; border: 1px solid {SECUNDARIO} !important; }}
-    [data-testid="stExpander"] {{ background-color: #FFFFFF; border: 1px solid {SECUNDARIO}; border-radius: 10px; }}
+    div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {{ background-color: {SECUNDARIO} !important; color: #FFFFFF !important; border: none !important; border-radius: 6px; font-weight: 600; }}
+    div.stButton > button:hover, div.stFormSubmitButton > button:hover {{ background-color: {PRIMARIO} !important; }}
+    .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {{ background-color: #FFFFFF !important; color: {TEXTO} !important; border: 1px solid #D1D5DB !important; }}
+    div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; border: 1px solid #D1D5DB !important; }}
+    [data-testid="stExpander"] {{ background-color: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px; }}
     .stTabs [data-baseweb="tab"] {{ color: {GRIS}; }}
-    .stTabs [aria-selected="true"] {{ color: {PRIMARIO} !important; }}
+    .stTabs [aria-selected="true"] {{ color: {SECUNDARIO} !important; font-weight: bold; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,7 +66,7 @@ def variacion(actual, anterior): return None if not anterior else (actual - ante
 
 def estilo_fig(fig, alto=360):
     fig.update_layout(template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=alto, margin=dict(l=10, r=10, t=40, b=10), legend=dict(orientation="h", y=-0.2), font=dict(color=TEXTO))
-    fig.update_xaxes(gridcolor="#E2E8F0"); fig.update_yaxes(gridcolor="#E2E8F0"); return fig
+    fig.update_xaxes(gridcolor="#E5E7EB"); fig.update_yaxes(gridcolor="#E5E7EB"); return fig
 
 def cargar(tabla):
     filas, ini = [], 0
@@ -215,7 +217,7 @@ if menu == "🏠 Inicio y Gráficos":
     izq, der = st.columns(2)
     with izq:
         st.markdown("### Ingresos (30 días)"); ini = hoy - timedelta(29); dias = pd.date_range(ini, hoy)
-        fig = go.Figure(go.Scatter(x=dias, y=serie_diaria(v, ini, hoy), mode="lines", fill="tozeroy", line=dict(color=PRIMARIO, width=2.5), fillcolor="rgba(51,65,85,0.15)"))
+        fig = go.Figure(go.Scatter(x=dias, y=serie_diaria(v, ini, hoy), mode="lines", fill="tozeroy", line=dict(color=SECUNDARIO, width=2.5), fillcolor="rgba(37,99,235,0.15)"))
         st.plotly_chart(estilo_fig(fig), use_container_width=True)
     with der:
         st.markdown("### Top Productos"); vm = filtrar(v, "dia", hoy.replace(day=1), hoy)
@@ -316,7 +318,7 @@ elif menu == "💳 Cuentas por pagar":
             if st.button("Registrar pago"):
                 try: sb.rpc("registrar_pago_proveedor", {"p_cxp_id": int(cxp_id), "p_valor": float(valor), "p_medio": "transferencia", "p_referencia": "Pago app"}).execute(); st.success("Pago registrado"); st.rerun()
                 except Exception as e: st.error(msg_error(e))
-elif menu == "📚 Contabilidad":
+    elif menu == "📚 Contabilidad":
     st.title("📚 Contabilidad"); t1, t2 = st.tabs(["Libro Diario", "Estados Financieros"])
     
     with t1:
@@ -425,4 +427,3 @@ elif menu == "⚙️ Panel Administrador":
         if c2.button("🗑️ Eliminar"): sb.table("Inventario").delete().eq("id", int(f["id"])).execute(); st.rerun()
     st.markdown("### Descargas"); d1, d2, d3 = st.columns(3)
     d1.download_button("Inventario (CSV)", inventario().to_csv(index=False).encode(), "inventario.csv"); d2.download_button("Ventas (CSV)", ventas().to_csv(index=False).encode(), "ventas.csv"); d3.download_button("Gastos (CSV)", gastos().to_csv(index=False).encode(), "gastos.csv")
-    
