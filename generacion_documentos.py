@@ -17,8 +17,8 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-# --- Paleta Azul Ejecutivo ---
-PRIMARIO = colors.HexColor("#1E3A8A")
+# --- Paleta Azul Oscuro ---
+PRIMARIO = colors.HexColor("#0F172A")
 TEXTO = colors.HexColor("#111827")
 GRIS = colors.HexColor("#6B7280")
 LINEA = colors.HexColor("#E5E7EB")
@@ -105,7 +105,7 @@ def _canvas_con_pie(pie, marca):
             self.restoreState()
             if marca:
                 self.saveState()
-                self.setFillColor(colors.Color(0.11, 0.22, 0.54, alpha=0.13))
+                self.setFillColor(colors.Color(0.05, 0.09, 0.16, alpha=0.13))
                 self.setFont("Helvetica-Bold", 96)
                 self.translate(ancho / 2, alto / 2)
                 self.rotate(40)
