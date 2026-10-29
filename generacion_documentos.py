@@ -20,14 +20,11 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-VINO = colors.HexColor("#8B1E3F")
-TEXTO = colors.HexColor("#1F2430")
-GRIS = colors.HexColor("#6B7280")
-LINEA = colors.HexColor("#E0D9CD")
-MARFIL = colors.HexColor("#F7F4EF")
-CARPETAS = {"venta": "Ventas", "compra": "Compras", "egreso": "Egresos", "contable": "Contables"}
-PREFIJOS = {"venta": "VEN", "compra": "COM", "egreso": "EGR", "contable": "CD"}
-AVISO = "Documento de soporte interno; no es factura electrónica."
+PRIMARIO = colors.HexColor("#1F4E3D")
+TEXTO = colors.HexColor("#2D3731")
+GRIS = colors.HexColor("#64748B")
+LINEA = colors.HexColor("#E5E7EB")
+FONDO_SUAVE = colors.HexColor("#EDF1EE")
 
 def moneda(x):
     try: return f"${float(x):,.0f}"
