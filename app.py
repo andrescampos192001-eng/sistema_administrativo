@@ -330,24 +330,22 @@ elif menu == "📚 Contabilidad":
             else: st.info("No hay líneas de movimiento registradas.")
         else: st.info("No hay movimientos contables registrados.")
 
-    with t2:
-        c1, c2 = st.columns(2)
-        ini = c1.date_input("Desde", value=hoy_co().replace(day=1))
-        fin = c2.date_input("Hasta", value=hoy_co())
+        with t2:
+        st.info("Calculando balances del mes actual...")
         
         st.markdown("### Balance de Comprobación")
-        r_bal = sb.rpc("balance_comprobacion", {"p_ini": str(ini), "p_fin": str(fin)}).execute()
+        r_bal = sb.rpc("balance_comprobacion", {}).execute()
         if r_bal.data:
             df_bal = pd.DataFrame(r_bal.data)
             st.dataframe(df_bal, use_container_width=True, hide_index=True)
             td, tc = df_bal["debito"].sum(), df_bal["credito"].sum()
             st.markdown(f"**Total Débitos:** {dinero(td)} | **Total Créditos:** {dinero(tc)}")
             if abs(td - tc) < 0.01: st.success("✔ El balance cuadra perfectamente.")
-            else: st.error("✘ El balance NO cuadra. Revisa los asientos.")
+            else: st.error("✘ El balance NO cuadra.")
         else: st.info("Sin movimientos en el período.")
 
         st.markdown("### Estado de Resultados")
-        r_res = sb.rpc("estado_resultados", {"p_ini": str(ini), "p_fin": str(fin)}).execute()
+        r_res = sb.rpc("estado_resultados", {}).execute()
         if r_res.data:
             df_res = pd.DataFrame(r_res.data)
             st.dataframe(df_res, use_container_width=True, hide_index=True)
