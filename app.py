@@ -315,17 +315,31 @@ elif menu == "💳 Cuentas por pagar":
 elif menu == "📚 Contabilidad":
     st.title("📚 Contabilidad"); t1, t2 = st.tabs(["Libro Diario", "Estados Financieros"])
     with t1:
-        r = sb.table("asientos").select("*,asiento_lineas(*)").order("numero", desc=True).limit(50).execute()
-        if r.data:
+        # 1. Traemos los asientos
+        r_asientos = sb.table("asientos").select("*").order("numero", desc=True).limit(50).execute()
+        if r_asientos.data:
             filas = []
-            for a in r.data:
-                for l in a.get("asiento_lineas", []): filas.append({"Número": f"CD-{a['numero']:06d}", "Fecha": str(a["fecha"])[:10], "Desc": a.get("descripcion"), "Débito": l.get("debito") or 0, "Crédito": l.get("credito") or 0})
+            # 2. Para cada asiento, traemos sus líneas
+            for a in r_asientos.data:
+                r_lineas = sb.table("asiento_lineas").select("*").eq("asiento_id", a["id"]).execute()
+                if r_lineas.data:
+                    for l in r_lineas.data:
+                        filas.append({
+                            "Número": f"CD-{a['numero']:06d}", 
+                            "Fecha": str(a["fecha"])[:10], 
+                            "Desc": a.get("descripcion"), 
+                            "Débito": l.get("debito") or 0, 
+                            "Crédito": l.get("credito") or 0
+                        })
             if filas:
-                df = pd.DataFrame(filas); st.dataframe(df, use_container_width=True, hide_index=True); st.markdown(f"**Débitos:** {dinero(df['Débito'].sum())} | **Créditos:** {dinero(df['Crédito'].sum())}")
-            else: st.info("No hay movimientos contables registrados.")
-        else: st.info("No hay movimientos contables registrados.")
+                df = pd.DataFrame(filas)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.markdown(f"**Débitos:** {dinero(df['Débito'].sum())} | **Créditos:** {dinero(df['Crédito'].sum())}")
+            else:
+                st.info("No hay líneas de movimiento registradas.")
+        else:
+            st.info("No hay movimientos contables registrados.")
     with t2: st.info("Balances calculados por RPC.")
-
 elif menu == "📄 Comprobantes y descargas":
     st.title("📄 Comprobantes y descargas"); c1, c2, c3 = st.columns(3); ini_f = c1.date_input("Desde", value=hoy_co().replace(day=1)); fin_f = c2.date_input("Hasta", value=hoy_co()); tipo_f = c3.selectbox("Tipo", ["Todos", "venta", "compra", "egreso", "contable"])
     q = sb.table("comprobantes").select("*").gte("fecha", str(ini_f)).lte("fecha", str(fin_f) + "T23:59:59").order("fecha", desc=True)
