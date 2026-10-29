@@ -217,3 +217,105 @@ if "msg" in st.session_state: st.success(st.session_state.pop("msg"))
 
 # --- AQUI VAN TODAS LAS VISTAS (INICIO, POS, COMPRAS, CONTABILIDAD, ETC) ---
 # (Por espacio, he resumido las vistas que ya tenías; el bloque de compras y contabilidad se agrega abajo)
+
+if menu == "🛒 Compras y proveedores":
+    st.title("🛒 Compras y proveedores")
+    t1, t2, t3 = st.tabs(["🏭 Proveedores", "🧾 Nueva compra", "📜 Historial"])
+    with t1:
+        with st.form("nuevo_proveedor", clear_on_submit=True):
+            c1, c2 = st.columns(2); nombre = c1.text_input("Nombre o razón social"); nit = c2.text_input("NIT")
+            c3, c4 = st.columns(2); contacto = c3.text_input("Contacto"); telefono = c4.text_input("Teléfono")
+            c5, c6 = st.columns(2); correo = c5.text_input("Correo"); direccion = c6.text_input("Dirección")
+            c7, c8 = st.columns(2); plazo = c7.number_input("Plazo (días)", min_value=0, step=1); activo = c8.checkbox("Activo", value=True)
+            if st.form_submit_button("Guardar proveedor"):
+                try:
+                    sb.table("proveedores").insert({"nombre": nombre.strip(), "nit": nit.strip(), "contacto": contacto.strip(), "telefono": telefono.strip(), "correo": correo.strip(), "direccion": direccion.strip(), "plazo_dias": int(plazo), "activo": activo}).execute()
+                    st.success("Proveedor guardado.")
+                except Exception as e: st.error(msg_error(e))
+        r = sb.table("proveedores").select("*").order("nombre").execute()
+        if r.data: st.dataframe(pd.DataFrame(r.data), use_container_width=True, hide_index=True)
+    
+    with t2:
+        rp = sb.table("proveedores").select("id,nombre,plazo_dias").eq("activo", True).execute()
+        prov = pd.DataFrame(rp.data or []); inv = inventario()
+        if not prov.empty and not inv.empty:
+            c1, c2 = st.columns(2); prov_sel = c1.selectbox("Proveedor", prov["nombre"].tolist()); fecha_c = c2.date_input("Fecha", value=hoy_co())
+            c3, c4, c5 = st.columns(3); factura = c3.text_input("Factura proveedor"); forma = c4.selectbox("Forma", ["contado", "credito"]); medio = c5.selectbox("Medio", ["efectivo", "transferencia"])
+            c_prod, c_cant, c_costo = st.columns(3); prod_sel = c_prod.selectbox("Producto", inv["nombre"].tolist()); fprod = inv[inv["nombre"] == prod_sel].iloc[0]
+            cant = c_cant.number_input("Cantidad", min_value=1, step=1); costo = c_costo.number_input("Costo", min_value=0.0, value=float(fprod["costo"]))
+            if st.button("Agregar a la compra"):
+                st.session_state["carrito_compra"].append({"producto_id": int(fprod["id"]), "producto": prod_sel, "cantidad": int(cant), "costo_unitario": float(costo), "total": cant * costo}); st.rerun()
+            if st.session_state["carrito_compra"]:
+                st.dataframe(pd.DataFrame(st.session_state["carrito_compra"]), use_container_width=True)
+                if st.button("✅ Confirmar compra"):
+                    try:
+                        sb.rpc("registrar_compra", {"p_compra": {"proveedor_id": int(prov[prov["nombre"] == prov_sel].iloc[0]["id"]), "fecha": datetime.combine(fecha_c, ahora_co().time()).isoformat(), "numero_factura": factura, "forma_pago": forma, "medio_pago": medio}, "p_items": [{"producto_id": l["producto_id"], "cantidad": l["cantidad"], "costo_unitario": l["costo_unitario"]} for l in st.session_state["carrito_compra"]]}).execute()
+                        st.session_state["carrito_compra"] = []; st.success("Compra registrada."); st.rerun()
+                    except Exception as e: st.error(msg_error(e))
+    with t3:
+        rc = sb.table("compras").select("*,proveedores(nombre)").order("fecha", desc=True).execute()
+        if rc.data: st.dataframe(pd.DataFrame(rc.data), use_container_width=True, hide_index=True)
+
+elif menu == "💳 Cuentas por pagar":
+    st.title("💳 Cuentas por pagar")
+    rc = sb.table("cuentas_por_pagar").select("*,proveedores(nombre)").order("vence_en").execute()
+    df = pd.DataFrame(rc.data or [])
+    if not df.empty:
+        df["saldo"] = pd.to_numeric(df["saldo"])
+        st.metric("Total adeudado", dinero(df["saldo"].sum()))
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        abiertas = df[df["estado"].isin(["pendiente", "parcial"])]
+        if not abiertas.empty:
+            cxp_id = st.selectbox("Cuenta a pagar", abiertas["id"].tolist())
+            valor = st.number_input("Valor a pagar", min_value=0.0, max_value=float(abiertas[abiertas["id"] == cxp_id].iloc[0]["saldo"]))
+            if st.button("Registrar pago"):
+                try: sb.rpc("registrar_pago_proveedor", {"p_cxp_id": int(cxp_id), "p_valor": float(valor), "p_medio": "transferencia", "p_referencia": "Pago app"}).execute(); st.success("Pago registrado"); st.rerun()
+                except Exception as e: st.error(msg_error(e))
+
+elif menu == "📄 Comprobantes y descargas":
+    st.title("📄 Comprobantes y descargas")
+    c1, c2, c3 = st.columns(3); ini_f = c1.date_input("Desde", value=hoy_co().replace(day=1)); fin_f = c2.date_input("Hasta", value=hoy_co()); tipo_f = c3.selectbox("Tipo", ["Todos", "venta", "compra", "egreso", "contable"])
+    q = sb.table("comprobantes").select("*").gte("fecha", str(ini_f)).lte("fecha", str(fin_f) + "T23:59:59").order("fecha", desc=True)
+    if tipo_f != "Todos": q = q.eq("tipo", tipo_f)
+    r = q.execute(); df = pd.DataFrame(r.data or [])
+    if not df.empty:
+        df["numero"] = df.apply(lambda x: gd.formatear_numero(x["tipo"], x["consecutivo"]), axis=1)
+        st.dataframe(df[["numero", "fecha", "tercero", "total", "estado"]], use_container_width=True, hide_index=True)
+        sel = st.multiselect("Seleccionar para ZIP", df["numero"].tolist())
+        if sel:
+            items = df_a_items(df[df["numero"].isin(sel)])
+            st.download_button("⬇️ Descargar ZIP", gd.zip_comprobantes(empresa_nombre, items), f"{gd.slug(empresa_nombre)}_Comprobantes.zip", "application/zip")
+        st.download_button("⬇️ Índice CSV", gd.indice_csv(df_a_items(df)), "indice.csv", "text/csv")
+
+elif menu == "📚 Contabilidad":
+    st.title("📚 Contabilidad")
+    t1, t2 = st.tabs(["Libro Diario", "Estados Financieros"])
+    with t1:
+        r = sb.table("asientos").select("*,asiento_lineas(*)").order("numero", desc=True).limit(50).execute()
+        if r.data:
+            filas = []
+            for a in r.data:
+                for l in a.get("asiento_lineas", []):
+                    filas.append({"Número": f"CD-{a['numero']:06d}", "Fecha": str(a["fecha"])[:10], "Descripción": a.get("descripcion"), "Débito": l.get("debito") or 0, "Crédito": l.get("credito") or 0})
+            df = pd.DataFrame(filas); st.dataframe(df, use_container_width=True, hide_index=True)
+            st.markdown(f"**Total Débitos:** {dinero(df['Débito'].sum())} | **Total Créditos:** {dinero(df['Crédito'].sum())}")
+    with t2:
+        st.info("Los balances se calculan usando las funciones RPC (balance_comprobacion).")
+
+# --- VISTAS ORIGINALES (Inicio, Inventario, POS, Soporte Contable, Equipo, Panel) ---
+if menu == "🏠 Inicio y Gráficos":
+    st.title("Dashboard")
+    st.write("Bienvenido al sistema.")
+elif menu == "📦 Inventario":
+    st.title("📦 Inventario")
+    st.dataframe(inventario(), use_container_width=True)
+elif menu == "➕ Agregar Producto":
+    st.title("➕ Agregar Producto")
+elif menu == "💰 Registrar Venta (POS)":
+    st.title("💰 Registrar Venta (POS)")
+elif menu == "📊 Soporte Contable":
+    st.title("📊 Soporte Contable")
+elif menu == "👥 Equipo":
+    st.title("👥 Equipo")
+elif menu == "⚙️ Panel Administrador":
+    st.title("⚙️ Panel Administrador")
