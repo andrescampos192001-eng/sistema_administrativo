@@ -318,7 +318,7 @@ elif menu == "💳 Cuentas por pagar":
             if st.button("Registrar pago"):
                 try: sb.rpc("registrar_pago_proveedor", {"p_cxp_id": int(cxp_id), "p_valor": float(valor), "p_medio": "transferencia", "p_referencia": "Pago app"}).execute(); st.success("Pago registrado"); st.rerun()
                 except Exception as e: st.error(msg_error(e))
-    elif menu == "📚 Contabilidad":
+elif menu == "📚 Contabilidad":
     st.title("📚 Contabilidad")
     t1, t2 = st.tabs(["Libro Diario", "Estados Financieros"])
     
@@ -370,6 +370,7 @@ elif menu == "💳 Cuentas por pagar":
         else: 
             st.info("Sin movimientos en el período.")
 
+    
 elif menu == "📄 Comprobantes y descargas":
     st.title("📄 Comprobantes y descargas"); c1, c2, c3 = st.columns(3); ini_f = c1.date_input("Desde", value=hoy_co().replace(day=1)); fin_f = c2.date_input("Hasta", value=hoy_co()); tipo_f = c3.selectbox("Tipo", ["Todos", "venta", "compra", "egreso", "contable"])
     q = sb.table("comprobantes").select("*").gte("fecha", str(ini_f)).lte("fecha", str(fin_f) + "T23:59:59").order("fecha", desc=True)
