@@ -1,6 +1,3 @@
-# ============================================================
-#  SIVAE · Generación de documentos (PDF, Excel, ZIP)
-# ============================================================
 import csv
 import io
 import re
@@ -20,11 +17,16 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+# --- Paleta Opción 2: Bosque y Salvia ---
 PRIMARIO = colors.HexColor("#1F4E3D")
 TEXTO = colors.HexColor("#2D3731")
 GRIS = colors.HexColor("#64748B")
 LINEA = colors.HexColor("#E5E7EB")
 FONDO_SUAVE = colors.HexColor("#EDF1EE")
+
+CARPETAS = {"venta": "Ventas", "compra": "Compras", "egreso": "Egresos", "contable": "Contables"}
+PREFIJOS = {"venta": "VEN", "compra": "COM", "egreso": "EGR", "contable": "CD"}
+AVISO = "Documento de soporte interno; no es factura electrónica."
 
 def moneda(x):
     try: return f"${float(x):,.0f}"
@@ -68,11 +70,11 @@ def _estilos():
         "tab": ParagraphStyle("tab", parent=normal, fontSize=8.5, leading=10.5),
         "tabb": ParagraphStyle("tabb", parent=normal, fontName="Helvetica-Bold", fontSize=8.5, leading=10.5),
         "emp": ParagraphStyle("emp", parent=normal, fontName="Helvetica-Bold", fontSize=13, leading=16),
-        "titulo": ParagraphStyle("titulo", parent=normal, fontName="Helvetica-Bold", fontSize=13, leading=16, textColor=VINO, alignment=TA_RIGHT),
+        "titulo": ParagraphStyle("titulo", parent=normal, fontName="Helvetica-Bold", fontSize=13, leading=16, textColor=PRIMARIO, alignment=TA_RIGHT),
         "num": ParagraphStyle("num", parent=normal, fontName="Helvetica-Bold", fontSize=11, alignment=TA_RIGHT),
         "der": ParagraphStyle("der", parent=normal, alignment=TA_RIGHT),
         "derb": ParagraphStyle("derb", parent=normal, fontName="Helvetica-Bold", alignment=TA_RIGHT),
-        "total": ParagraphStyle("total", parent=normal, fontName="Helvetica-Bold", fontSize=12, leading=15, alignment=TA_RIGHT, textColor=VINO),
+        "total": ParagraphStyle("total", parent=normal, fontName="Helvetica-Bold", fontSize=12, leading=15, alignment=TA_RIGHT, textColor=PRIMARIO),
     }
 
 def _canvas_con_pie(pie, marca):
@@ -103,7 +105,7 @@ def _canvas_con_pie(pie, marca):
             self.restoreState()
             if marca:
                 self.saveState()
-                self.setFillColor(colors.Color(0.545, 0.118, 0.247, alpha=0.13))
+                self.setFillColor(colors.Color(0.12, 0.3, 0.24, alpha=0.13))
                 self.setFont("Helvetica-Bold", 96)
                 self.translate(ancho / 2, alto / 2)
                 self.rotate(40)
@@ -126,7 +128,7 @@ def _encabezado(est, empresa, titulo, numero, ancho):
     if numero: der.append(_p(f"N.º {numero}", est["num"]))
     t = Table([[izq, der]], colWidths=[ancho * 0.55, ancho * 0.45])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
-    return [t, Spacer(1, 6), HRFlowable(width="100%", thickness=2, color=VINO, spaceAfter=8)]
+    return [t, Spacer(1, 6), HRFlowable(width="100%", thickness=2, color=PRIMARIO, spaceAfter=8)]
 
 def _bloque_datos(est, izquierda, derecha, ancho):
     def col(pares): return [Paragraph(f"<b>{escape(k)}:</b> {escape(str(v))}", est["n"]) for k, v in pares if v not in (None, "")]
@@ -143,9 +145,9 @@ def _tabla(est, encabezados, filas, anchos, derecha=(), total_fila=None):
     if total_fila:
         datos.append([Paragraph(escape(str(c)), ParagraphStyle("ct", parent=est["tabb"], alignment=TA_RIGHT if i in derecha else 0)) for i, c in enumerate(total_fila)])
     t = Table(datos, colWidths=anchos, repeatRows=1)
-    estilo = [("BACKGROUND", (0, 0), (-1, 0), VINO), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 1), (-1, -1), 0.4, LINEA),
+    estilo = [("BACKGROUND", (0, 0), (-1, 0), PRIMARIO), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 1), (-1, -1), 0.4, LINEA),
               ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4), ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5)]
-    if total_fila: estilo += [("LINEABOVE", (0, -1), (-1, -1), 1, VINO), ("BACKGROUND", (0, -1), (-1, -1), MARFIL)]
+    if total_fila: estilo += [("LINEABOVE", (0, -1), (-1, -1), 1, PRIMARIO), ("BACKGROUND", (0, -1), (-1, -1), FONDO_SUAVE)]
     t.setStyle(TableStyle(estilo))
     return t
 
