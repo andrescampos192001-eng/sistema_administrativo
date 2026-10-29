@@ -320,7 +320,10 @@ elif menu == "📚 Contabilidad":
             filas = []
             for a in r.data:
                 for l in a.get("asiento_lineas", []): filas.append({"Número": f"CD-{a['numero']:06d}", "Fecha": str(a["fecha"])[:10], "Desc": a.get("descripcion"), "Débito": l.get("debito") or 0, "Crédito": l.get("credito") or 0})
-            df = pd.DataFrame(filas); st.dataframe(df, use_container_width=True, hide_index=True); st.markdown(f"**Débitos:** {dinero(df['Débito'].sum())} | **Créditos:** {dinero(df['Crédito'].sum())}")
+            if filas:
+                df = pd.DataFrame(filas); st.dataframe(df, use_container_width=True, hide_index=True); st.markdown(f"**Débitos:** {dinero(df['Débito'].sum())} | **Créditos:** {dinero(df['Crédito'].sum())}")
+            else: st.info("No hay movimientos contables registrados.")
+        else: st.info("No hay movimientos contables registrados.")
     with t2: st.info("Balances calculados por RPC.")
 
 elif menu == "📄 Comprobantes y descargas":
