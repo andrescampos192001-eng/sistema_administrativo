@@ -1,5 +1,5 @@
 # ============================================================
-#  SISTEMA DE GESTIÓN ADMINISTRATIVA · SIVAE v1.1 (Azul Ejecutivo)
+#  SISTEMA DE GESTIÓN ADMINISTRATIVA · SIVAE v1.1 (Azul Oscuro)
 # ============================================================
 from secrets import token_hex
 from datetime import date, datetime, timedelta
@@ -14,12 +14,11 @@ st.set_page_config(page_title="Sistema de gestión", page_icon="💎", layout="w
 SUPABASE_URL = "https://tqgmapwcknhdydjkbdtj.supabase.co"
 ZONA = "America/Bogota"
 
-# --- Paleta Azul Ejecutivo ---
-PRIMARIO = "#1E3A8A"       # Azul empresarial oscuro (Sidebar)
-PRIMARIO_OSC = "#172554"   # Azul más oscuro para hover
-SECUNDARIO = "#2563EB"     # Azul brillante (Botones/Acentos)
-FONDO = "#F8F9FA"          # Blanco Hueso
-FONDO_OSC = "#FFFFFF"      # Blanco puro para tarjetas
+# --- Paleta Azul Ejecutivo Oscuro ---
+PRIMARIO = "#0F172A"       # Azul casi negro (Sidebar)
+PRIMARIO_OSC = "#020617"   # Negro para hover
+SECUNDARIO = "#1D4ED8"     # Azul brillante (Botones/Acentos)
+FONDO = "#FFFFFF"          # Blanco puro (Fondo general)
 TEXTO = "#111827"          # Gris casi negro
 GRIS = "#6B7280"           # Gris para textos secundarios
 
@@ -40,16 +39,23 @@ sb = get_sb()
 
 st.markdown(f"""
 <style>
+    /* Fondo blanco general */
     .stApp {{ background-color: {FONDO} !important; color: {TEXTO}; }}
+    [data-testid="stHeader"] {{ background-color: {FONDO} !important; }}
+    
+    /* Barra lateral Azul Oscuro */
     [data-testid="stSidebar"] {{ background-color: {PRIMARIO} !important; border-right: none; }}
     [data-testid="stSidebar"] * {{ color: #FFFFFF !important; }}
-    [data-testid="stSidebar"] .stRadio label {{ color: #FFFFFF !important; }}
+    
     h1 {{ color: {TEXTO} !important; font-weight: 700; }}
     h2, h3 {{ color: {PRIMARIO} !important; }}
-    div[data-testid="stMetric"] {{ background: {FONDO_OSC}; padding: 16px 18px; border-radius: 8px; border: 1px solid #E5E7EB; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+    
+    div[data-testid="stMetric"] {{ background: #F8F9FA; padding: 16px 18px; border-radius: 8px; border: 1px solid #E5E7EB; }}
     div[data-testid="stMetric"] label {{ color: {GRIS} !important; }}
+    
     div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {{ background-color: {SECUNDARIO} !important; color: #FFFFFF !important; border: none !important; border-radius: 6px; font-weight: 600; }}
     div.stButton > button:hover, div.stFormSubmitButton > button:hover {{ background-color: {PRIMARIO} !important; }}
+    
     .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea {{ background-color: #FFFFFF !important; color: {TEXTO} !important; border: 1px solid #D1D5DB !important; }}
     div[data-baseweb="select"] > div {{ background-color: #FFFFFF !important; border: 1px solid #D1D5DB !important; }}
     [data-testid="stExpander"] {{ background-color: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px; }}
@@ -217,7 +223,7 @@ if menu == "🏠 Inicio y Gráficos":
     izq, der = st.columns(2)
     with izq:
         st.markdown("### Ingresos (30 días)"); ini = hoy - timedelta(29); dias = pd.date_range(ini, hoy)
-        fig = go.Figure(go.Scatter(x=dias, y=serie_diaria(v, ini, hoy), mode="lines", fill="tozeroy", line=dict(color=SECUNDARIO, width=2.5), fillcolor="rgba(37,99,235,0.15)"))
+        fig = go.Figure(go.Scatter(x=dias, y=serie_diaria(v, ini, hoy), mode="lines", fill="tozeroy", line=dict(color=SECUNDARIO, width=2.5), fillcolor="rgba(29,78,216,0.15)"))
         st.plotly_chart(estilo_fig(fig), use_container_width=True)
     with der:
         st.markdown("### Top Productos"); vm = filtrar(v, "dia", hoy.replace(day=1), hoy)
@@ -370,7 +376,6 @@ elif menu == "📚 Contabilidad":
         else: 
             st.info("Sin movimientos en el período.")
 
-    
 elif menu == "📄 Comprobantes y descargas":
     st.title("📄 Comprobantes y descargas"); c1, c2, c3 = st.columns(3); ini_f = c1.date_input("Desde", value=hoy_co().replace(day=1)); fin_f = c2.date_input("Hasta", value=hoy_co()); tipo_f = c3.selectbox("Tipo", ["Todos", "venta", "compra", "egreso", "contable"])
     q = sb.table("comprobantes").select("*").gte("fecha", str(ini_f)).lte("fecha", str(fin_f) + "T23:59:59").order("fecha", desc=True)
