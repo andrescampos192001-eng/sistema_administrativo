@@ -319,7 +319,8 @@ elif menu == "💳 Cuentas por pagar":
                 try: sb.rpc("registrar_pago_proveedor", {"p_cxp_id": int(cxp_id), "p_valor": float(valor), "p_medio": "transferencia", "p_referencia": "Pago app"}).execute(); st.success("Pago registrado"); st.rerun()
                 except Exception as e: st.error(msg_error(e))
     elif menu == "📚 Contabilidad":
-    st.title("📚 Contabilidad"); t1, t2 = st.tabs(["Libro Diario", "Estados Financieros"])
+    st.title("📚 Contabilidad")
+    t1, t2 = st.tabs(["Libro Diario", "Estados Financieros"])
     
     with t1:
         r_asientos = sb.table("asientos").select("*").order("numero", desc=True).limit(50).execute()
@@ -331,7 +332,8 @@ elif menu == "💳 Cuentas por pagar":
                     for l in r_lineas.data:
                         filas.append({"Número": f"CD-{a['numero']:06d}", "Fecha": str(a["fecha"])[:10], "Desc": a.get("descripcion"), "Débito": l.get("debito") or 0, "Crédito": l.get("credito") or 0})
             if filas:
-                df = pd.DataFrame(filas); st.dataframe(df, use_container_width=True, hide_index=True)
+                df = pd.DataFrame(filas)
+                st.dataframe(df, use_container_width=True, hide_index=True)
                 st.markdown(f"**Débitos:** {dinero(df['Débito'].sum())} | **Créditos:** {dinero(df['Crédito'].sum())}")
             else: 
                 st.info("No hay líneas de movimiento registradas.")
